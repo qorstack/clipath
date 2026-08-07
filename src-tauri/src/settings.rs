@@ -268,6 +268,10 @@ fn migrate(settings: &mut Settings) {
         s.open_settings = s.open_settings.take().or(d.open_settings);
         s.region = s.region.take().or(d.region);
     }
+    // Pin to screen was removed; fall back to the default action.
+    if settings.output.default_final_action == "pin" {
+        settings.output.default_final_action = "copy-path".into();
+    }
     settings.schema_version = SCHEMA_VERSION;
 }
 

@@ -40,7 +40,5 @@ export const ipc = {
   deleteFile: (path: string) => invoke<void>("delete_file", { path }),
   revealInFolder: (path: string) => invoke<void>("reveal_in_folder", { path }),
   openPath: (path: string) => invoke<void>("open_path", { path }),
-  pinFile: (path: string) => invoke<void>("pin_file", { path }),
-  getPinPath: (label: string) => invoke<string>("get_pin_path", { label }),
   hideMainWindow: () => invoke<void>("hide_main_window"),
 };

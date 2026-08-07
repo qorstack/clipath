@@ -1,6 +1,6 @@
 use crate::capture::{self, CaptureSession, Region};
 use crate::settings::{self, Settings};
-use crate::{clipboard, filename, overlay, pin, shortcuts, tray, winutil, AppState};
+use crate::{clipboard, filename, overlay, shortcuts, tray, winutil, AppState};
 use base64::Engine;
 use serde::Serialize;
 use std::fs;
@@ -93,10 +93,22 @@ pub fn prewarm(app: &AppHandle) {
 }
 
 fn spawn_capture(app: AppHandle, mode: CaptureMode) {
-    let state = app.state::<AppState>();
-    if state.capture_active.swap(true, Ordering::SeqCst) {
-        crate::dlog("capture already in progress, ignoring");
-        return;
+    {
+        let state = app.state::<AppState>();
+        if state.capture_active.load(Ordering::SeqCst) {
+            // The flag is only trustworthy while a session and a visible
+            // overlay both exist. Anything else is left over from a capture
+            // that ended abnormally, and must not wedge the shortcut.
+            let live =
+                state.session.lock().unwrap().is_some() && overlay::any_visible(&app);
+            if live {
+                crate::dlog("capture already in progress, ignoring");
+                return;
+            }
+            crate::dlog("clearing stale capture state");
+            end_capture(&app);
+        }
+        state.capture_active.store(true, Ordering::SeqCst);
     }
     std::thread::spawn(move || {
         if let Err(e) = start_capture(&app, mode) {
@@ -487,17 +499,32 @@ pub fn commit_region(
 ) -> Result<String, String> {
     crate::dlog(&format!("commit_region(mon={monitor}, {x},{y} {w}x{h})"));
     let region = Region { monitor, x, y, w, h };
-    let path = {
+    let written = {
         let state = app.state::<AppState>();
         let guard = state.session.lock().unwrap();
-        let session = guard.as_ref().ok_or("no capture session")?;
-        let shot = session
-            .monitors
-            .get(monitor)
-            .ok_or("monitor not in session")?;
-        write_region(&app, shot, region)?
+        guard
+            .as_ref()
+            .ok_or_else(|| "no capture session".to_string())
+            .and_then(|session| {
+                let shot = session
+                    .monitors
+                    .get(monitor)
+                    .ok_or_else(|| "monitor not in session".to_string())?;
+                write_region(&app, shot, region)
+            })
     };
+    // Release the capture either way; a failed save must not wedge the
+    // shortcut behind a busy flag that never clears.
     end_capture(&app);
+    let path = match written {
+        Ok(p) => p,
+        Err(e) => {
+            crate::dlog(&format!("commit_region failed: {e}"));
+            winutil::restore_foreground(*app.state::<AppState>().prev_focus.lock().unwrap());
+            notify_error(&app, "Couldn't save screenshot", &e);
+            return Err(e);
+        }
+    };
     open_editor(&app, &path)?;
     Ok(path.to_string_lossy().to_string())
 }
@@ -570,7 +597,6 @@ pub fn finalize_image(
             clipboard::copy_text(&text)?;
         }
         "copy-image" => clipboard::copy_image_rgba(img.width(), img.height(), img.as_raw())?,
-        "pin" => pin::create_pin(&app, &path, None)?,
         _ => {}
     }
 
@@ -741,22 +767,6 @@ pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
     app.opener()
         .open_path(path, None::<&str>)
         .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn pin_file(app: AppHandle, path: String) -> Result<(), String> {
-    pin::create_pin(&app, &path, None)
-}
-
-#[tauri::command]
-pub fn get_pin_path(app: AppHandle, label: String) -> Result<String, String> {
-    app.state::<AppState>()
-        .pins
-        .lock()
-        .unwrap()
-        .get(&label)
-        .cloned()
-        .ok_or_else(|| "unknown pin".into())
 }
 
 #[tauri::command]

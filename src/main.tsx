@@ -4,7 +4,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./styles.css";
 import { MainWindow } from "./app/MainWindow";
 import { CaptureOverlay } from "./features/capture/CaptureOverlay";
-import { PinView } from "./features/pin/PinView";
 
 const label = getCurrentWindow().label;
 const OVERLAY_PREFIX = "overlay-";
@@ -14,9 +13,6 @@ if (label.startsWith(OVERLAY_PREFIX)) {
   // overlay-{monitor}
   document.body.classList.add("overlay-body");
   content = <CaptureOverlay monitor={Number(label.slice(OVERLAY_PREFIX.length))} />;
-} else if (label.startsWith("pin-")) {
-  document.body.classList.add("pin-body");
-  content = <PinView label={label} />;
 } else {
   content = <MainWindow />;
 }

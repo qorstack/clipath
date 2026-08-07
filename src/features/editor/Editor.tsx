@@ -1,6 +1,7 @@
 import Konva from "konva";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, Settings as SettingsIcon } from "lucide-react";
 import { ipc } from "../../lib/ipc";
@@ -246,13 +247,7 @@ export function Editor({
           await ipc.closeEditor();
         } else {
           refreshRecent();
-          showToast(
-            action === "copy-path"
-              ? "Path copied"
-              : action === "copy-image"
-                ? "Image copied"
-                : "Pinned to screen",
-          );
+          showToast(action === "copy-path" ? "Path copied" : "Image copied");
         }
       } catch (e) {
         setError(String(e));
@@ -284,6 +279,16 @@ export function Editor({
     },
     [path, applyPending],
   );
+
+  // Closing the window from the title bar must not silently discard work.
+  useEffect(() => {
+    const un = getCurrentWindow().onCloseRequested(async () => {
+      await applyPending();
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [applyPending]);
 
   // A newly requested capture arrives while the editor is open.
   useEffect(() => {

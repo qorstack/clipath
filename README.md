@@ -23,7 +23,9 @@ Ctrl + Shift + A  →  drag region  →  (annotate)  →  Enter
 - **Annotations** — arrow, line, rectangle, ellipse, pen, highlighter, text,
   blur, pixelate, and a sequential step counter (1, 2, 3…), with a full color
   picker, undo/redo, and object editing.
-- **Pin to screen** — float any capture above your windows, drag, zoom, set opacity.
+- **Editor** — every capture opens in an editor window with a Recent strip, so
+  another shot's path is one click away.
+- **Crop** — trim a capture further without leaving the editor.
 - **Capture modes** — region, full screen, active window, previous region.
 - **Recent captures** — lightweight history with per-item actions.
 - **Multi-monitor + mixed DPI** — physical-pixel-accurate cropping across monitors.

@@ -12,7 +12,7 @@ export type Tool =
   | "pixelate"
   | "counter";
 
-export type FinalAction = "copy-path" | "copy-image" | "save" | "pin";
+export type FinalAction = "copy-path" | "copy-image" | "save";
 
 export interface Settings {
   schemaVersion: number;

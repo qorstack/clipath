@@ -4,7 +4,6 @@ mod commands;
 mod filename;
 mod history;
 mod overlay;
-mod pin;
 mod settings;
 mod shortcuts;
 mod tray;
@@ -33,7 +32,6 @@ pub struct AppState {
     pub last_saved: Mutex<Option<PathBuf>>,
     pub prev_region: Mutex<Option<Region>>,
     pub shortcut_map: Mutex<Vec<(Shortcut, String)>>,
-    pub pins: Mutex<std::collections::HashMap<String, String>>,
     pub capture_active: std::sync::atomic::AtomicBool,
     pub overlay_layout: Mutex<Vec<(i32, i32, u32, u32)>>,
     /// Window that had focus when the capture started, so the editor can hand
@@ -75,7 +73,6 @@ pub fn run() {
                 last_saved: Mutex::new(None),
                 prev_region: Mutex::new(None),
                 shortcut_map: Mutex::new(Vec::new()),
-                pins: Mutex::new(std::collections::HashMap::new()),
                 capture_active: std::sync::atomic::AtomicBool::new(false),
                 overlay_layout: Mutex::new(Vec::new()),
                 prev_focus: Mutex::new(0),
@@ -149,8 +146,6 @@ pub fn run() {
             commands::delete_file,
             commands::reveal_in_folder,
             commands::open_path,
-            commands::pin_file,
-            commands::get_pin_path,
             commands::hide_main_window,
         ])
         .build(tauri::generate_context!())

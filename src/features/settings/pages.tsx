@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Copy, ExternalLink, FolderOpen, Pin, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, FolderOpen, Trash2 } from "lucide-react";
 import { ipc } from "../../lib/ipc";
 import { useSettings } from "../../lib/settings";
 import { Button, Row, Section, Select, SliderRow, Toggle } from "../../components/ui";
@@ -357,7 +357,6 @@ export function OutputPage() {
               { value: "copy-path", label: "Copy Path" },
               { value: "copy-image", label: "Copy Image" },
               { value: "save", label: "Save & Close" },
-              { value: "pin", label: "Pin" },
             ]}
             onChange={(v) => update({ output: { defaultFinalAction: v as any } })}
           />
@@ -625,9 +624,6 @@ export function RecentPage() {
                 <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                   <IconBtn title="Copy Path" onClick={() => ipc.copyPathText(item.path)}>
                     <Copy size={14} />
-                  </IconBtn>
-                  <IconBtn title="Pin" onClick={() => ipc.pinFile(item.path)}>
-                    <Pin size={14} />
                   </IconBtn>
                   <IconBtn title="Open" onClick={() => ipc.openPath(item.path)}>
                     <ExternalLink size={14} />

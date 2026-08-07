@@ -14,7 +14,6 @@ import {
   Undo2,
   Redo2,
   Copy,
-  Pin,
   Check,
   MoreHorizontal,
   Link,
@@ -288,12 +287,24 @@ export function ActionBar({
           <Copy size={14} />
           Copy Image
         </button>
-        <IconAction title={showTooltips ? "Pin to screen" : undefined} disabled={busy} onClick={() => onAction("pin")}>
-          <Pin size={15} />
-        </IconAction>
-        <IconAction title={showTooltips ? "Save & Close" : undefined} disabled={busy} onClick={() => onAction("save")}>
-          <Check size={16} strokeWidth={2.5} style={{ color: "var(--success)" }} />
-        </IconAction>
+        <button
+          disabled={busy}
+          onClick={() => onAction("save")}
+          className="flex h-[30px] items-center gap-1.5 rounded-[8px] px-2.5 text-[12.5px] font-medium transition-colors disabled:opacity-50"
+          style={{ color: "var(--text)" }}
+          title={
+            showTooltips ? "Apply annotations to the file and close the window" : undefined
+          }
+          onMouseEnter={(e) =>
+            ((e.currentTarget as HTMLElement).style.background = "var(--control-hover)")
+          }
+          onMouseLeave={(e) =>
+            ((e.currentTarget as HTMLElement).style.background = "transparent")
+          }
+        >
+          <Check size={15} strokeWidth={2.5} style={{ color: "var(--success)" }} />
+          Save &amp; Close
+        </button>
         <IconAction title={showTooltips ? "More" : undefined} disabled={busy} onClick={() => setOpen(!open)}>
           <MoreHorizontal size={16} />
         </IconAction>
