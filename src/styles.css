@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f5f5f7;
+  --panel: #ffffff;
+  --elevated: rgba(255, 255, 255, 0.92);
+  --text: #1d1d1f;
+  --text-2: #6e6e73;
+  --border: rgba(0, 0, 0, 0.08);
+  --accent: #5e5ce6;
+  --accent-soft: rgba(94, 92, 230, 0.12);
+  --destructive: #ff3b30;
+  --success: #34c759;
+  --control: rgba(0, 0, 0, 0.05);
+  --control-hover: rgba(0, 0, 0, 0.09);
+}
+
+.dark {
+  --bg: #1c1c1e;
+  --panel: #242426;
+  --elevated: rgba(44, 44, 46, 0.94);
+  --text: #f5f5f7;
+  --text-2: #a1a1a6;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #7d7aff;
+  --accent-soft: rgba(125, 122, 255, 0.18);
+  --destructive: #ff453a;
+  --success: #30d158;
+  --control: rgba(255, 255, 255, 0.08);
+  --control-hover: rgba(255, 255, 255, 0.14);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    "Inter",
+    "Segoe UI Variable Text",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+body.overlay-body,
+body.pin-body {
+  background: transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--control-hover);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* The logo is white line art — invert it so it reads on light backgrounds. */
+.app-logo {
+  filter: invert(1);
+}
+.dark .app-logo {
+  filter: none;
+}
+
+.panel-shadow {
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.14),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[type="text"],
+input[type="number"] {
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--text);
+  user-select: text;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
