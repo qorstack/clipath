@@ -118,20 +118,9 @@ export function AnnotationStage(props: StageProps) {
       return;
     }
 
-    if (tool === "text") {
-      const ann: TextAnn = {
-        id: newId(),
-        type: "text",
-        x,
-        y,
-        text: "",
-        color,
-        fontSize: annCfg.fontSize,
-      };
-      commit([...anns, ann]);
-      props.onStartTextEdit(ann.id);
-      return;
-    }
+    // Text is placed on click, not here: mounting the input during mousedown
+    // means the matching mouseup lands on the canvas and immediately blurs it.
+    if (tool === "text") return;
 
     if (tool === "counter") {
       const existing = anns.filter((a) => a.type === "counter") as CounterAnn[];
@@ -268,6 +257,22 @@ export function AnnotationStage(props: StageProps) {
     }
   };
 
+  const handleClick = () => {
+    if (tool !== "text") return;
+    const { x, y } = pointer();
+    const ann: TextAnn = {
+      id: newId(),
+      type: "text",
+      x,
+      y,
+      text: "",
+      color,
+      fontSize: annCfg.fontSize,
+    };
+    commit([...anns, ann]);
+    props.onStartTextEdit(ann.id);
+  };
+
   const cursor = tool === "select" ? "default" : tool === "text" ? "text" : "crosshair";
 
   return (
@@ -280,6 +285,7 @@ export function AnnotationStage(props: StageProps) {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onClick={handleClick}
       style={{ cursor, display: "block" }}
     >
       <Layer>

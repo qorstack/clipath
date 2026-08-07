@@ -95,6 +95,14 @@ input:focus-visible,
   outline-offset: 1px;
 }
 
+/* The page suppresses selection so dragging never highlights the UI, but
+   anything the user types into must opt back in — without this the caret
+   cannot be placed and text cannot be selected. */
+input,
+textarea {
+  user-select: text;
+}
+
 input[type="text"],
 input[type="number"] {
   background: var(--control);
@@ -102,7 +110,6 @@ input[type="number"] {
   border-radius: 8px;
   padding: 6px 10px;
   color: var(--text);
-  user-select: text;
 }
 
 @media (prefers-reduced-motion: reduce) {

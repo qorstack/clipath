@@ -10,19 +10,24 @@ import { AnnotationStage, type CropRect } from "../capture/AnnotationStage";
 import { ActionBar, Toolbar } from "../capture/Toolbar";
 import { CropBox, RATIOS, fitRatio } from "./CropBox";
 
+/**
+ * Keyed by physical key position, not by the character produced. Reading
+ * `event.key` breaks every shortcut the moment the keyboard layout is not
+ * Latin — on a Thai layout the T key reports "ะ" and matches nothing.
+ */
 const TOOL_KEYS: Record<string, Tool> = {
-  v: "select",
-  c: "crop",
-  a: "arrow",
-  l: "line",
-  r: "rect",
-  o: "ellipse",
-  p: "pen",
-  h: "highlighter",
-  t: "text",
-  b: "blur",
-  x: "pixelate",
-  n: "counter",
+  KeyV: "select",
+  KeyC: "crop",
+  KeyA: "arrow",
+  KeyL: "line",
+  KeyR: "rect",
+  KeyO: "ellipse",
+  KeyP: "pen",
+  KeyH: "highlighter",
+  KeyT: "text",
+  KeyB: "blur",
+  KeyX: "pixelate",
+  KeyN: "counter",
 };
 
 const MIME: Record<string, string> = {
@@ -75,6 +80,7 @@ export function Editor({
   const stageRef = useRef<Konva.Stage | null>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
   const objectUrl = useRef<string | null>(null);
+  const activeThumb = useRef<HTMLButtonElement>(null);
 
   const filename = path.split(/[\\/]/).pop() ?? path;
   const folder = path.slice(0, Math.max(0, path.length - filename.length - 1));
@@ -135,6 +141,16 @@ export function Editor({
       .catch(console.error);
   }, [settings.recent.limit]);
   useEffect(refreshRecent, [refreshRecent, path]);
+
+  // Keep the open capture in view when stepping through Recent with the
+  // arrow keys — 'nearest' scrolls only when it has actually gone off-screen.
+  useEffect(() => {
+    activeThumb.current?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "smooth",
+    });
+  }, [path, recent]);
 
   // ---- fit the image to the available area --------------------------------
   useEffect(() => {
@@ -414,7 +430,6 @@ export function Editor({
       if (editingTextId || editingCounterId) return;
       const target = e.target as HTMLElement;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
-      const key = e.key.toLowerCase();
 
       if (e.key === "Escape") {
         e.preventDefault();
@@ -427,18 +442,18 @@ export function Editor({
         finalize(settings.output.defaultFinalAction);
         return;
       }
-      if (e.ctrlKey && key === "c") {
+      if (e.ctrlKey && e.code === "KeyC") {
         e.preventDefault();
         finalize(e.shiftKey ? "copy-image" : "copy-path");
         return;
       }
-      if (e.ctrlKey && key === "z") {
+      if (e.ctrlKey && e.code === "KeyZ") {
         e.preventDefault();
         if (e.shiftKey) redo();
         else undo();
         return;
       }
-      if (e.ctrlKey && key === "y") {
+      if (e.ctrlKey && e.code === "KeyY") {
         e.preventDefault();
         redo();
         return;
@@ -479,7 +494,8 @@ export function Editor({
         );
         return;
       }
-      if (!e.ctrlKey && !e.altKey && !e.metaKey && TOOL_KEYS[key]) setTool(TOOL_KEYS[key]);
+      if (!e.ctrlKey && !e.altKey && !e.metaKey && TOOL_KEYS[e.code])
+        setTool(TOOL_KEYS[e.code]);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -619,6 +635,9 @@ export function Editor({
                   )
                 }
                 onDone={(empty) => {
+                  // Placing the text was already an undo step, and the
+                  // keystrokes were applied live on top of it, so one undo
+                  // removes the whole thing — which is what you want.
                   if (empty)
                     setAnns(annsRef.current.filter((a) => a.id !== editingText.id));
                   setEditingTextId(null);
@@ -731,6 +750,7 @@ export function Editor({
               return (
                 <button
                   key={item.path}
+                  ref={active ? activeThumb : undefined}
                   title={item.filename}
                   disabled={busy}
                   onClick={() => openPath(item.path)}
@@ -820,21 +840,47 @@ function TextEditor({
   onDone: (empty: boolean) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const settled = useRef(false);
+  const fontSize = ann.fontSize * scale;
+
+  /** Track the typed text so the box never clips what has been written. */
+  const autoSize = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${el.scrollHeight}px`;
+    el.style.width = "0px";
+    el.style.width = `${Math.max(el.scrollWidth + fontSize * 0.6, fontSize * 4)}px`;
+  }, [fontSize]);
+
   useEffect(() => {
-    ref.current?.focus();
-  }, []);
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    // Put the caret at the end so re-editing appends rather than replaces.
+    el.setSelectionRange(el.value.length, el.value.length);
+    autoSize();
+    // Ignore a blur that arrives before the input has really settled: a
+    // stray focus change on mount would otherwise discard the empty text
+    // before a single character could be typed.
+    const t = window.setTimeout(() => {
+      settled.current = true;
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [autoSize]);
+
   return (
     <textarea
       ref={ref}
       defaultValue={ann.text}
       spellCheck={false}
+      rows={1}
+      wrap="off"
       className="absolute z-50 resize-none overflow-hidden bg-transparent outline-none"
       style={{
         left: ann.x * scale - 2,
         top: ann.y * scale - 2,
-        minWidth: 160,
-        minHeight: ann.fontSize * scale * 1.5,
-        fontSize: ann.fontSize * scale,
+        fontSize,
         fontWeight: 600,
         lineHeight: 1.25,
         fontFamily: '"Inter", "Segoe UI", system-ui, sans-serif',
@@ -843,14 +889,27 @@ function TextEditor({
         textShadow: "0 1px 3px rgba(0,0,0,0.45)",
         border: "1px dashed rgba(128,128,128,0.6)",
         padding: 1,
+        whiteSpace: "pre",
       }}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => {
+        onChange(e.target.value);
+        autoSize();
+      }}
       onKeyDown={(e) => {
+        // Keep tool shortcuts and Enter-to-copy out of the way while typing.
         e.stopPropagation();
-        if (e.key === "Escape" || (e.key === "Enter" && e.ctrlKey))
+        if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) {
+          e.preventDefault();
           onDone(!(e.target as HTMLTextAreaElement).value.trim());
+        }
       }}
-      onBlur={(e) => onDone(!e.target.value.trim())}
+      onBlur={(e) => {
+        if (!settled.current) {
+          e.target.focus();
+          return;
+        }
+        onDone(!e.target.value.trim());
+      }}
     />
   );
 }
