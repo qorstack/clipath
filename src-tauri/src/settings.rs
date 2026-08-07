@@ -92,7 +92,7 @@ pub struct Recent {
     pub limit: u32,
 }
 
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 impl Default for Settings {
     fn default() -> Self {
@@ -176,7 +176,8 @@ impl Default for Shortcuts {
             fullscreen: Some("Ctrl+Shift+F".into()),
             active_window: Some("Ctrl+Shift+E".into()),
             previous_region: Some("Ctrl+Shift+R".into()),
-            copy_last_path: Some("Ctrl+Shift+C".into()),
+            // Ctrl+Shift+C is left free for Copy Image inside the editor.
+            copy_last_path: Some("Ctrl+Shift+P".into()),
             open_folder: Some("Ctrl+Shift+O".into()),
             open_settings: Some("Ctrl+Shift+Comma".into()),
         }
@@ -267,6 +268,13 @@ fn migrate(settings: &mut Settings) {
         s.open_folder = s.open_folder.take().or(d.open_folder);
         s.open_settings = s.open_settings.take().or(d.open_settings);
         s.region = s.region.take().or(d.region);
+    }
+    if settings.schema_version < 3 {
+        // The editor took Ctrl+Shift+C for Copy Image, so the global
+        // Copy Last Path binding has to move off it.
+        if settings.shortcuts.copy_last_path.as_deref() == Some("Ctrl+Shift+C") {
+            settings.shortcuts.copy_last_path = Some("Ctrl+Shift+P".into());
+        }
     }
     // Pin to screen was removed; fall back to the default action.
     if settings.output.default_final_action == "pin" {

@@ -270,7 +270,7 @@ export function ActionBar({
           onClick={() => onAction("copy-path")}
           className="flex h-[30px] items-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           style={{ background: "var(--accent)" }}
-          title={showTooltips ? "Copy saved file path (Enter)" : undefined}
+          title={showTooltips ? "Copy the saved file path (Ctrl+C or Enter)" : undefined}
         >
           <Link size={14} strokeWidth={2.25} />
           Copy Path
@@ -280,7 +280,7 @@ export function ActionBar({
           onClick={() => onAction("copy-image")}
           className="flex h-[30px] items-center gap-1.5 rounded-[8px] px-2.5 text-[12.5px] font-medium transition-colors disabled:opacity-50"
           style={{ color: "var(--text)" }}
-          title={showTooltips ? "Copy image to clipboard" : undefined}
+          title={showTooltips ? "Copy the image to the clipboard (Ctrl+Shift+C)" : undefined}
           onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--control-hover)")}
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
         >

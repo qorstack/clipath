@@ -381,6 +381,11 @@ export function Editor({
         finalize(settings.output.defaultFinalAction);
         return;
       }
+      if (e.ctrlKey && key === "c") {
+        e.preventDefault();
+        finalize(e.shiftKey ? "copy-image" : "copy-path");
+        return;
+      }
       if (e.ctrlKey && key === "z") {
         e.preventDefault();
         if (e.shiftKey) redo();

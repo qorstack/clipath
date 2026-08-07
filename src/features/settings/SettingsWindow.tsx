@@ -1,5 +1,6 @@
 import {
   Settings as SettingsIcon,
+  ChevronLeft,
   Crop,
   PenLine,
   FolderOutput,
@@ -33,9 +34,12 @@ const NAV = [
 export function SettingsWindow({
   page,
   setPage,
+  onBack,
 }: {
   page: string;
   setPage: (p: string) => void;
+  /** Present when a capture is open behind Settings and can be returned to. */
+  onBack?: () => void;
 }) {
   const active = NAV.find((n) => n.id === page) ?? NAV[0];
   return (
@@ -44,9 +48,26 @@ export function SettingsWindow({
         className="flex w-[190px] shrink-0 flex-col gap-0.5 border-r px-3 py-4"
         style={{ borderColor: "var(--border)" }}
       >
-        <div className="mb-3 px-2 text-[15px] font-semibold tracking-tight">
-          Clipath
-        </div>
+        {onBack ? (
+          <button
+            onClick={onBack}
+            className="mb-3 flex items-center gap-1.5 rounded-[8px] px-2 py-1 text-left text-[13px] font-medium"
+            style={{ color: "var(--accent)" }}
+            onMouseEnter={(e) =>
+              ((e.currentTarget as HTMLElement).style.background = "var(--control-hover)")
+            }
+            onMouseLeave={(e) =>
+              ((e.currentTarget as HTMLElement).style.background = "transparent")
+            }
+          >
+            <ChevronLeft size={15} />
+            Back to capture
+          </button>
+        ) : (
+          <div className="mb-3 px-2 text-[15px] font-semibold tracking-tight">
+            Clipath
+          </div>
+        )}
         {NAV.map((item) => {
           const Icon = item.icon;
           const isActive = item.id === active.id;

@@ -9,15 +9,21 @@ function MainContent() {
   const { settings } = useSettings();
   const [page, setPage] = useState("general");
   const [editorPath, setEditorPath] = useState<string | null>(null);
+  // Settings sits on top of the editor rather than replacing it, so the
+  // capture being worked on is still there to come back to.
+  const [showSettings, setShowSettings] = useState(false);
   useApplyTheme(settings);
 
   useEffect(() => {
     const nav = listen<string>("navigate", (e) => {
       if (e.payload === "editor") return; // the open-editor event carries the path
-      setEditorPath(null);
       setPage(e.payload);
+      setShowSettings(true);
     });
-    const open = listen<string>("open-editor", (e) => setEditorPath(e.payload));
+    const open = listen<string>("open-editor", (e) => {
+      setEditorPath(e.payload);
+      setShowSettings(false);
+    });
     return () => {
       nav.then((f) => f());
       open.then((f) => f());
@@ -26,15 +32,22 @@ function MainContent() {
 
   if (!settings) return null;
   if (!settings.onboardingCompleted) return <Onboarding />;
-  if (editorPath)
+
+  if (editorPath && !showSettings)
     return (
       <Editor
         path={editorPath}
         settings={settings}
-        onOpenSettings={() => setEditorPath(null)}
+        onOpenSettings={() => setShowSettings(true)}
       />
     );
-  return <SettingsWindow page={page} setPage={setPage} />;
+  return (
+    <SettingsWindow
+      page={page}
+      setPage={setPage}
+      onBack={editorPath ? () => setShowSettings(false) : undefined}
+    />
+  );
 }
 
 export function MainWindow() {

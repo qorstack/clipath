@@ -446,7 +446,7 @@ export function ShortcutsPage() {
               fullscreen: "Ctrl+Shift+F",
               activeWindow: "Ctrl+Shift+E",
               previousRegion: "Ctrl+Shift+R",
-              copyLastPath: "Ctrl+Shift+C",
+              copyLastPath: "Ctrl+Shift+P",
               openFolder: "Ctrl+Shift+O",
               openSettings: "Ctrl+Shift+Comma",
             },
