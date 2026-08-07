@@ -378,16 +378,34 @@ export function Editor({
           case "copy-folder":
             await ipc.copyText(folder);
             break;
-          case "delete":
+          case "delete": {
+            // Move to the neighbouring capture rather than dismissing the
+            // window — deleting a bad shot is usually mid-triage, not done.
+            const index = recent.findIndex((r) => r.path === path);
             await ipc.deleteFile(path);
-            await ipc.closeEditor();
+            const remaining = await ipc.listRecent(Math.max(12, settings.recent.limit));
+            setRecent(remaining);
+            const next =
+              (index >= 0 ? remaining[index] : undefined) ??
+              (index > 0 ? remaining[index - 1] : undefined) ??
+              remaining[0];
+            if (next) {
+              // Not openPath: that flushes annotations, which would write the
+              // file back out after it was just deleted.
+              setCrop(null);
+              setPath(next.path);
+              showToast("Screenshot deleted");
+            } else {
+              await ipc.closeEditor();
+            }
             break;
+          }
         }
       } catch (e) {
         setError(String(e));
       }
     },
-    [filename, folder, path, exportDataUrl, applyPending],
+    [filename, folder, path, exportDataUrl, applyPending, recent, settings, showToast],
   );
 
   // ---- keyboard ------------------------------------------------------------

@@ -859,6 +859,7 @@ pub fn copy_image_file(path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn delete_file(app: AppHandle, path: String) -> Result<(), String> {
     fs::remove_file(&path).map_err(|e| format!("cannot delete: {e}"))?;
+    crate::history::forget(&app, Path::new(&path));
     let state = app.state::<AppState>();
     let mut last = state.last_saved.lock().unwrap();
     if last.as_ref().map(|p| p.to_string_lossy() == path) == Some(true) {

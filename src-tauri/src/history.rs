@@ -54,6 +54,13 @@ pub fn record(app: &tauri::AppHandle, path: &Path) {
     save(app, &index);
 }
 
+pub fn forget(app: &tauri::AppHandle, path: &Path) {
+    let mut index = load(app);
+    if index.remove(&key(path)).is_some() {
+        save(app, &index);
+    }
+}
+
 pub fn captured_at(index: &Index, path: &Path) -> Option<u64> {
     index.get(&key(path)).copied()
 }
