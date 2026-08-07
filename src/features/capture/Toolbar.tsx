@@ -310,8 +310,10 @@ export function ActionBar({
         </IconAction>
       </div>
       {(open || moreOpen) && (
+        // Opens upward: the action bar sits on the window's bottom edge, so
+        // a menu dropping down would be clipped.
         <div
-          className="panel-shadow absolute right-0 top-[calc(100%+6px)] z-50 min-w-[170px] rounded-[12px] border py-1"
+          className="panel-shadow absolute bottom-[calc(100%+6px)] right-0 z-50 min-w-[170px] rounded-[12px] border py-1"
           style={{
             background: "var(--elevated)",
             borderColor: "var(--border)",

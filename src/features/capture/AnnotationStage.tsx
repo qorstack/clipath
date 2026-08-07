@@ -92,7 +92,6 @@ export function AnnotationStage(props: StageProps) {
 
   const [draft, setDraft] = useState<Ann | null>(null);
   const drawing = useRef(false);
-  const cropStart = useRef<{ x: number; y: number } | null>(null);
 
   const updateAnn = (id: string, patch: Partial<Ann>) => {
     setAnnsLive(anns.map((a) => (a.id === id ? ({ ...a, ...patch } as Ann) : a)));
@@ -109,12 +108,9 @@ export function AnnotationStage(props: StageProps) {
     if (e.evt.button !== 0) return;
     const { x, y } = pointer();
 
-    if (tool === "crop") {
-      drawing.current = true;
-      cropStart.current = { x, y };
-      props.onCropChange({ x, y, w: 0, h: 0 });
-      return;
-    }
+    // Crop is driven by the handles rendered over the stage, not by drawing
+    // a fresh rectangle.
+    if (tool === "crop") return;
 
     if (tool === "select") {
       const clickedEmpty = e.target === stageRef.current || e.target.name() === "bg";
@@ -189,24 +185,6 @@ export function AnnotationStage(props: StageProps) {
   };
 
   const handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (tool === "crop" && drawing.current && cropStart.current) {
-      const { x, y } = pointer();
-      const s = cropStart.current;
-      let ex = x;
-      let ey = y;
-      if (e.evt.shiftKey) {
-        const m = Math.max(Math.abs(ex - s.x), Math.abs(ey - s.y));
-        ex = s.x + Math.sign(ex - s.x || 1) * m;
-        ey = s.y + Math.sign(ey - s.y || 1) * m;
-      }
-      props.onCropChange({
-        x: Math.max(0, Math.min(s.x, ex)),
-        y: Math.max(0, Math.min(s.y, ey)),
-        w: Math.min(imgW, Math.abs(ex - s.x)),
-        h: Math.min(imgH, Math.abs(ey - s.y)),
-      });
-      return;
-    }
     if (!drawing.current || !draft) return;
     const { x, y } = pointer();
     // Shift constrains proportions: square / circle / 45° lines.
@@ -257,12 +235,6 @@ export function AnnotationStage(props: StageProps) {
   };
 
   const handleMouseUp = () => {
-    if (tool === "crop") {
-      drawing.current = false;
-      cropStart.current = null;
-      if (props.crop && (props.crop.w < 8 || props.crop.h < 8)) props.onCropChange(null);
-      return;
-    }
     if (!drawing.current || !draft) {
       drawing.current = false;
       return;

@@ -6,8 +6,9 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, Settings as SettingsIcon } from "lucide-react";
 import { ipc } from "../../lib/ipc";
 import type { Ann, CounterAnn, FinalAction, RecentItem, Settings, TextAnn, Tool } from "../../types";
-import { AnnotationStage } from "../capture/AnnotationStage";
+import { AnnotationStage, type CropRect } from "../capture/AnnotationStage";
 import { ActionBar, Toolbar } from "../capture/Toolbar";
+import { CropBox, RATIOS, fitRatio } from "./CropBox";
 
 const TOOL_KEYS: Record<string, Tool> = {
   v: "select",
@@ -44,9 +45,8 @@ export function Editor({
   // is open swaps the image in place instead of opening another window.
   const [path, setPath] = useState(requestedPath);
   const [reloadKey, setReloadKey] = useState(0);
-  const [crop, setCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(
-    null,
-  );
+  const [crop, setCrop] = useState<CropRect | null>(null);
+  const [ratioId, setRatioId] = useState("free");
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -210,6 +210,33 @@ export function Editor({
     if (t !== "crop") setCrop(null);
   }, []);
 
+  // Crop opens on the whole image so the edges can be pushed inward.
+  useEffect(() => {
+    if (tool !== "crop" || !image) return;
+    setCrop((c) => c ?? { x: 0, y: 0, w: image.naturalWidth, h: image.naturalHeight });
+  }, [tool, image]);
+
+  const applyRatio = useCallback(
+    (id: string) => {
+      setRatioId(id);
+      if (!image) return;
+      const preset = RATIOS.find((r) => r.id === id);
+      if (!preset || preset.value === null) return;
+      const value =
+        preset.id === "original" ? image.naturalWidth / image.naturalHeight : preset.value;
+      setCrop(fitRatio(image.naturalWidth, image.naturalHeight, value));
+    },
+    [image],
+  );
+
+  const ratio = useMemo(() => {
+    const preset = RATIOS.find((r) => r.id === ratioId);
+    if (!preset || preset.value === null || !image) return null;
+    return preset.id === "original"
+      ? image.naturalWidth / image.naturalHeight
+      : preset.value;
+  }, [ratioId, image]);
+
   // ---- export --------------------------------------------------------------
   const exportDataUrl = useCallback(async (): Promise<string> => {
     setSelectedId(null);
@@ -318,6 +345,7 @@ export function Editor({
       });
       await ipc.finalizeImage(path, "save", dataUrl);
       setCrop(null);
+      setRatioId("free");
       setToolRaw("select");
       setReloadKey((k) => k + 1);
     } catch (e) {
@@ -403,6 +431,16 @@ export function Editor({
         setSelectedId(null);
         return;
       }
+      // With nothing selected, left/right step through Recent.
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !selectedId) {
+        e.preventDefault();
+        if (tool === "crop") return;
+        const i = recent.findIndex((r) => r.path === path);
+        if (i === -1) return;
+        const next = recent[i + (e.key === "ArrowRight" ? 1 : -1)];
+        if (next) openPath(next.path);
+        return;
+      }
       if (e.key.startsWith("Arrow") && selectedId) {
         e.preventDefault();
         const step = e.shiftKey ? 10 : 1;
@@ -438,6 +476,10 @@ export function Editor({
     commit,
     beginGesture,
     setTool,
+    tool,
+    recent,
+    path,
+    openPath,
   ]);
 
   const editingText = editingTextId
@@ -535,41 +577,16 @@ export function Editor({
               onCropChange={setCrop}
             />
 
-            {tool === "crop" && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-                <div
-                  className="panel-shadow pointer-events-auto flex items-center gap-2 rounded-[11px] border px-2.5 py-1.5"
-                  style={{
-                    background: "var(--elevated)",
-                    borderColor: "var(--border)",
-                    backdropFilter: "blur(20px)",
-                  }}
-                >
-                  <span className="text-[12px]" style={{ color: "var(--text-2)" }}>
-                    {crop && crop.w >= 8
-                      ? `${Math.round(crop.w)} × ${Math.round(crop.h)}`
-                      : "Drag to choose the area to keep"}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setCrop(null);
-                      setToolRaw("select");
-                    }}
-                    className="rounded-[7px] px-2.5 py-1 text-[12px] font-medium"
-                    style={{ background: "var(--control)", color: "var(--text)" }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={applyCrop}
-                    disabled={!crop || crop.w < 8 || crop.h < 8 || busy}
-                    className="rounded-[7px] px-3 py-1 text-[12px] font-semibold text-white disabled:opacity-40"
-                    style={{ background: "var(--accent)" }}
-                  >
-                    Apply Crop
-                  </button>
-                </div>
-              </div>
+            {tool === "crop" && crop && (
+              <CropBox
+                crop={crop}
+                setCrop={setCrop}
+                imgW={image.naturalWidth}
+                imgH={image.naturalHeight}
+                scale={displayScale}
+                ratio={ratio}
+                accent={settings.appearance.accent}
+              />
             )}
 
             {editingText && (
@@ -626,6 +643,57 @@ export function Editor({
           </div>
         )}
       </div>
+
+      {/* crop controls */}
+      {tool === "crop" && (
+        <div className="flex shrink-0 justify-center px-4 pt-2">
+          <div
+            className="flex flex-wrap items-center justify-center gap-2 rounded-[12px] border px-3 py-2"
+            style={{ background: "var(--panel)", borderColor: "var(--border)" }}
+          >
+            <span
+              className="text-[12px] tabular-nums"
+              style={{ color: "var(--text-2)" }}
+            >
+              {crop ? `${Math.round(crop.w)} × ${Math.round(crop.h)}` : "—"}
+            </span>
+            <div className="flex items-center gap-1">
+              {RATIOS.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => applyRatio(r.id)}
+                  className="rounded-[7px] px-2 py-1 text-[11.5px] font-medium transition-colors"
+                  style={{
+                    background: ratioId === r.id ? "var(--accent)" : "var(--control)",
+                    color: ratioId === r.id ? "#fff" : "var(--text)",
+                  }}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                setCrop(null);
+                setRatioId("free");
+                setToolRaw("select");
+              }}
+              className="rounded-[7px] px-2.5 py-1 text-[12px] font-medium"
+              style={{ background: "var(--control)", color: "var(--text)" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={applyCrop}
+              disabled={!crop || crop.w < 16 || crop.h < 16 || busy}
+              className="rounded-[7px] px-3 py-1 text-[12px] font-semibold text-white disabled:opacity-40"
+              style={{ background: "var(--accent)" }}
+            >
+              Apply Crop
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* recent strip */}
       {recent.length > 1 && (
