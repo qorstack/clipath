@@ -2,7 +2,7 @@ import Konva from "konva";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { FolderOpen, Settings as SettingsIcon, X } from "lucide-react";
+import { FolderOpen, Settings as SettingsIcon } from "lucide-react";
 import { ipc } from "../../lib/ipc";
 import type { Ann, CounterAnn, FinalAction, RecentItem, Settings, TextAnn, Tool } from "../../types";
 import { AnnotationStage } from "../capture/AnnotationStage";
@@ -49,6 +49,8 @@ export function Editor({
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef(0);
   const [recent, setRecent] = useState<RecentItem[]>([]);
   const [viewport, setViewport] = useState({ w: 800, h: 500 });
 
@@ -116,6 +118,13 @@ export function Editor({
     },
     [],
   );
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 1800);
+  }, []);
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
   // ---- recent strip --------------------------------------------------------
   const refreshRecent = useCallback(() => {
@@ -231,15 +240,27 @@ export function Editor({
         const dataUrl = await exportDataUrl();
         await rememberPrefs();
         await ipc.finalizeImage(path, action, dataUrl);
-        if (action !== "pin") await ipc.closeEditor();
-        else refreshRecent();
+        // Copying leaves the editor open so another path can be grabbed from
+        // Recent; only Save & Close puts the window away.
+        if (action === "save") {
+          await ipc.closeEditor();
+        } else {
+          refreshRecent();
+          showToast(
+            action === "copy-path"
+              ? "Path copied"
+              : action === "copy-image"
+                ? "Image copied"
+                : "Pinned to screen",
+          );
+        }
       } catch (e) {
         setError(String(e));
       } finally {
         setBusy(false);
       }
     },
-    [busy, image, exportDataUrl, rememberPrefs, path, refreshRecent],
+    [busy, image, exportDataUrl, rememberPrefs, path, refreshRecent, showToast],
   );
 
   /** Flatten pending annotations into the file without closing the editor. */
@@ -420,7 +441,7 @@ export function Editor({
   const stageH = image ? Math.round(image.naturalHeight * displayScale) : 0;
 
   return (
-    <div className="flex h-full flex-col" style={{ background: "var(--bg)" }}>
+    <div className="relative flex h-full flex-col" style={{ background: "var(--bg)" }}>
       {/* header */}
       <header
         data-tauri-drag-region
@@ -438,9 +459,6 @@ export function Editor({
         </HeaderButton>
         <HeaderButton title="Settings" onClick={onOpenSettings}>
           <SettingsIcon size={15} />
-        </HeaderButton>
-        <HeaderButton title="Close (Esc)" onClick={() => ipc.closeEditor()}>
-          <X size={16} />
         </HeaderButton>
       </header>
 
@@ -640,6 +658,15 @@ export function Editor({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div
+          className="panel-shadow pointer-events-none absolute left-1/2 top-16 z-50 -translate-x-1/2 rounded-full px-4 py-1.5 text-[12.5px] font-medium"
+          style={{ background: "var(--elevated)", color: "var(--text)" }}
+        >
+          {toast}
         </div>
       )}
 

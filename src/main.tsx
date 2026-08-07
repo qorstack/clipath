@@ -7,12 +7,13 @@ import { CaptureOverlay } from "./features/capture/CaptureOverlay";
 import { PinView } from "./features/pin/PinView";
 
 const label = getCurrentWindow().label;
+const OVERLAY_PREFIX = "overlay-";
 
 let content: React.ReactNode;
-if (label.startsWith("overlay-")) {
-  // overlay-{session}-{monitor}
+if (label.startsWith(OVERLAY_PREFIX)) {
+  // overlay-{monitor}
   document.body.classList.add("overlay-body");
-  content = <CaptureOverlay monitor={Number(label.split("-")[2] ?? 0)} />;
+  content = <CaptureOverlay monitor={Number(label.slice(OVERLAY_PREFIX.length))} />;
 } else if (label.startsWith("pin-")) {
   document.body.classList.add("pin-body");
   content = <PinView label={label} />;

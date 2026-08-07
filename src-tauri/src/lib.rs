@@ -2,6 +2,7 @@
 mod clipboard;
 mod commands;
 mod filename;
+mod history;
 mod overlay;
 mod pin;
 mod settings;
@@ -109,11 +110,16 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // The main window hides to the tray instead of closing.
+            // The main window hides to the tray instead of closing, handing
+            // focus back so a just-copied path can be pasted straight away.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
                     api.prevent_close();
                     let _ = window.hide();
+                    if let Some(state) = window.app_handle().try_state::<AppState>() {
+                        let prev = *state.prev_focus.lock().unwrap();
+                        winutil::restore_foreground(prev);
+                    }
                 }
             }
         })

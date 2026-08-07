@@ -182,13 +182,16 @@ fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
         return Ok(());
     }
 
-    overlay::ensure_overlays(app, &infos)?;
+    // Publish the session before the windows exist: an overlay created here
+    // (first run, or after a monitor change) mounts and asks for its frame
+    // immediately, which would race the event below.
     *app.state::<AppState>().session.lock().unwrap() = Some(CaptureSession {
         monitors: shots,
         saved_path: None,
         region: None,
         prev_focus,
     });
+    overlay::ensure_overlays(app, &infos)?;
     for info in &infos {
         let _ = app.emit_to(overlay::label_for(info.index), "capture-start", info.index);
     }
@@ -216,6 +219,7 @@ fn write_region(
         img.height(),
     );
     capture::encode_and_write(&img, &path, &snapshot.output.format, snapshot.output.quality)?;
+    crate::history::record(app, &path);
     let state = app.state::<AppState>();
     *state.last_saved.lock().unwrap() = Some(path.clone());
     if snapshot.capture.remember_previous_region {
@@ -643,7 +647,8 @@ pub fn list_recent(app: AppHandle, limit: usize) -> Vec<RecentItem> {
         .output
         .folder
         .clone();
-    let mut items: Vec<(std::time::SystemTime, RecentItem)> = Vec::new();
+    let index = crate::history::load(&app);
+    let mut items: Vec<RecentItem> = Vec::new();
     let Ok(entries) = fs::read_dir(&folder) else {
         return Vec::new();
     };
@@ -656,27 +661,36 @@ pub fn list_recent(app: AppHandle, limit: usize) -> Vec<RecentItem> {
         if !IMAGE_EXTS.contains(&ext.as_str()) {
             continue;
         }
-        let Ok(modified) = entry.metadata().and_then(|m| m.modified()) else {
-            continue;
-        };
-        let ms = modified
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-        items.push((
-            modified,
-            RecentItem {
-                filename: path
-                    .file_name()
-                    .map(|f| f.to_string_lossy().to_string())
-                    .unwrap_or_default(),
-                path: path.to_string_lossy().to_string(),
-                modified: ms,
-            },
-        ));
+        // Prefer the recorded capture time; re-saving an annotated shot must
+        // not reorder the list.
+        let taken = crate::history::captured_at(&index, &path).or_else(|| {
+            entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()?
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .map(|d| d.as_millis() as u64)
+        });
+        let Some(taken) = taken else { continue };
+        items.push(RecentItem {
+            filename: path
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            path: path.to_string_lossy().to_string(),
+            modified: taken,
+        });
     }
-    items.sort_by(|a, b| b.0.cmp(&a.0));
-    items.into_iter().take(limit).map(|(_, i)| i).collect()
+    // Newest first; filename breaks ties because the default pattern is
+    // timestamped and therefore already in chronological order.
+    items.sort_by(|a, b| {
+        b.modified
+            .cmp(&a.modified)
+            .then_with(|| b.filename.cmp(&a.filename))
+    });
+    items.truncate(limit);
+    items
 }
 
 #[tauri::command]

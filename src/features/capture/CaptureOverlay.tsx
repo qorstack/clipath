@@ -35,31 +35,41 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
   const scale = info?.scale ?? 1;
 
   // ---- session start -------------------------------------------------------
+  const loading = useRef(false);
+
   const begin = useCallback(async () => {
-    const d = await ipc.getOverlayInfo(monitor);
-    setInfo(d.monitor);
-    setSettings(d.settings);
-    setSel(null);
-    dragStart.current = null;
+    // A freshly created window mounts and loads at the same moment the
+    // capture-start event lands; only honour one of them.
+    if (loading.current) return;
+    loading.current = true;
+    try {
+      const d = await ipc.getOverlayInfo(monitor);
+      setInfo(d.monitor);
+      setSettings(d.settings);
+      setSel(null);
+      dragStart.current = null;
 
-    const buf = await ipc.getOverlayFrame(monitor);
-    // Raw RGBA straight into an ImageBitmap: no encoder, no decoder.
-    const data = new ImageData(
-      new Uint8ClampedArray(buf),
-      d.monitor.width,
-      d.monitor.height,
-    );
-    bitmapRef.current?.close();
-    bitmapRef.current = await createImageBitmap(data);
+      const buf = await ipc.getOverlayFrame(monitor);
+      // Raw RGBA straight into an ImageBitmap: no encoder, no decoder.
+      const data = new ImageData(
+        new Uint8ClampedArray(buf),
+        d.monitor.width,
+        d.monitor.height,
+      );
+      bitmapRef.current?.close();
+      bitmapRef.current = await createImageBitmap(data);
 
-    const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.width = d.monitor.width;
-      canvas.height = d.monitor.height;
-      canvas.getContext("2d")?.drawImage(bitmapRef.current, 0, 0);
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = d.monitor.width;
+        canvas.height = d.monitor.height;
+        canvas.getContext("2d")?.drawImage(bitmapRef.current, 0, 0);
+      }
+      setPhase("idle");
+      await ipc.overlayReady(monitor);
+    } finally {
+      loading.current = false;
     }
-    setPhase("idle");
-    await ipc.overlayReady(monitor);
   }, [monitor]);
 
   useEffect(() => {
