@@ -245,14 +245,45 @@ fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
         prev_focus,
     });
     overlay::ensure_overlays(app, &infos)?;
-    for info in &infos {
-        let _ = app.emit_to(overlay::label_for(info.index), "capture-start", info.index);
-    }
+    dispatch_overlays(app, &infos);
     crate::dlog(&format!(
         "capture ready: grab {grabbed}ms, dispatch {}ms",
         started.elapsed().as_millis()
     ));
+    watch_for_overlay(app);
     Ok(())
+}
+
+fn dispatch_overlays(app: &AppHandle, infos: &[capture::MonitorInfo]) {
+    for info in infos {
+        let _ = app.emit_to(overlay::label_for(info.index), "capture-start", info.index);
+    }
+}
+
+/// A reused overlay whose WebView has been suspended by the system will never
+/// answer capture-start, and the capture would just appear to do nothing.
+/// Rebuild the windows once if nothing has come up shortly after dispatch.
+fn watch_for_overlay(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        let state = app.state::<AppState>();
+        if !state.capture_active.load(Ordering::SeqCst) || overlay::any_visible(&app) {
+            return;
+        }
+        let infos: Vec<capture::MonitorInfo> = match state.session.lock().unwrap().as_ref() {
+            Some(s) => s.monitors.iter().map(|m| m.info()).collect(),
+            None => return,
+        };
+        crate::dlog("overlay did not respond, rebuilding");
+        overlay::close_overlays(&app);
+        if let Err(e) = overlay::ensure_overlays(&app, &infos) {
+            crate::dlog(&format!("overlay rebuild failed: {e}"));
+            end_capture(&app);
+            return;
+        }
+        dispatch_overlays(&app, &infos);
+    });
 }
 
 /// Crop a region out of a frozen frame and write it to the screenshots folder.

@@ -46,22 +46,21 @@ pub fn ensure_overlays(app: &AppHandle, monitors: &[MonitorInfo]) -> Result<(), 
             .visible(false)
             .shadow(false)
             .focused(false)
-            .inner_size(IDLE_SIZE as f64, IDLE_SIZE as f64)
             .build()
             .map_err(|e| format!("cannot create capture overlay: {e}"))?;
-        win.set_position(PhysicalPosition::new(m.x, m.y))
-            .map_err(|e| e.to_string())?;
+        expand(&win, m)?;
     }
     *state.overlay_layout.lock().unwrap() = layout;
     Ok(())
 }
 
-/// Idle overlays are kept tiny. The window stays alive so its WebView never
-/// has to boot again, but a full-screen compositing surface for every monitor
-/// is a lot of memory to hold while nothing is being captured.
-const IDLE_SIZE: u32 = 1;
-
-/// Give an overlay its monitor's geometry, ready to be shown.
+/// Give an overlay its monitor's geometry.
+///
+/// Idle overlays deliberately keep full monitor size even while hidden.
+/// Shrinking them to free the compositing surface reads to Chromium as an
+/// occluded window and it freezes the renderer, so the overlay stops
+/// answering the event that starts a capture. Idle memory is reclaimed by
+/// tearing the windows down entirely instead.
 pub fn expand(win: &tauri::WebviewWindow, m: &MonitorInfo) -> Result<(), String> {
     win.set_position(PhysicalPosition::new(m.x, m.y))
         .map_err(|e| e.to_string())?;
@@ -105,6 +104,5 @@ pub fn hide_overlays(app: &AppHandle) {
         }
         let _ = win.hide();
         let _ = app.emit_to(label.as_str(), "capture-end", ());
-        let _ = win.set_size(PhysicalSize::new(IDLE_SIZE, IDLE_SIZE));
     }
 }
