@@ -31,6 +31,21 @@ Ctrl + Shift + A  →  drag region  →  (annotate)  →  Enter
 - **Multi-monitor + mixed DPI** — physical-pixel-accurate cropping across monitors.
 - **Local-first** — no accounts, no uploads, no telemetry.
 
+## Performance
+
+Measured on a two-monitor setup (2560×1440 + 1920×1080):
+
+| | |
+|---|---|
+| Shortcut → selection visible | ~170 ms |
+| Idle memory | ~28 MB, one process |
+| Idle CPU | 0% (no polling) |
+
+Clipath keeps its WebViews warm while you are capturing and releases them
+after three idle minutes, so a burst of screenshots stays fast without a
+few hundred megabytes sitting behind a tray icon for the rest of the day.
+The first capture after a quiet spell pays ~600 ms to rebuild them.
+
 ## Development
 
 Prerequisites: Node 20+, pnpm, Rust (stable, MSVC).

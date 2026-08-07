@@ -38,6 +38,10 @@ pub struct AppState {
     /// it back and the copied path can be pasted immediately.
     pub prev_focus: Mutex<isize>,
     pub capture_started: Mutex<Option<std::time::Instant>>,
+    /// Last time the user captured or used the editor, for the idle sweep.
+    pub last_activity: Mutex<std::time::Instant>,
+    /// Capture waiting to be shown, read by the main window as it mounts.
+    pub pending_editor: Mutex<Option<String>>,
 }
 
 pub fn run() {
@@ -77,6 +81,8 @@ pub fn run() {
                 overlay_layout: Mutex::new(Vec::new()),
                 prev_focus: Mutex::new(0),
                 capture_started: Mutex::new(None),
+                last_activity: Mutex::new(std::time::Instant::now()),
+                pending_editor: Mutex::new(None),
             });
             tray::create_tray(&handle, &loaded)?;
             let errors = shortcuts::register_all(&handle, &loaded);
@@ -85,7 +91,8 @@ pub fn run() {
             }
             crate::dlog("started, shortcuts registered");
             // Build the capture overlays while the app is idle so the first
-            // shortcut press is as fast as every later one.
+            // shortcut press is as fast as every later one, then release them
+            // again once the user has stopped capturing.
             {
                 let h = handle.clone();
                 std::thread::spawn(move || {
@@ -95,6 +102,10 @@ pub fn run() {
                         std::thread::sleep(std::time::Duration::from_millis(800));
                         crate::dlog("test trigger");
                         commands::run_action(h.clone(), "region");
+                    }
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_secs(30));
+                        commands::release_if_idle(&h);
                     }
                 });
             }
@@ -112,8 +123,9 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
                     api.prevent_close();
-                    let _ = window.hide();
-                    if let Some(state) = window.app_handle().try_state::<AppState>() {
+                    let app = window.app_handle();
+                    commands::hide_main(app);
+                    if let Some(state) = app.try_state::<AppState>() {
                         let prev = *state.prev_focus.lock().unwrap();
                         winutil::restore_foreground(prev);
                     }
@@ -135,6 +147,7 @@ pub fn run() {
             commands::overlay_ready,
             commands::commit_region,
             commands::cancel_capture,
+            commands::take_pending_editor,
             commands::read_image,
             commands::finalize_image,
             commands::save_image_as,

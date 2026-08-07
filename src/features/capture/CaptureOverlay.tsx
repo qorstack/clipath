@@ -72,16 +72,35 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
     }
   }, [monitor]);
 
+  /** Drop everything the capture needed; the window itself stays warm. */
+  const release = useCallback(() => {
+    bitmapRef.current?.close();
+    bitmapRef.current = null;
+    const canvas = canvasRef.current;
+    if (canvas) {
+      // Zeroing the dimensions frees the backing store, which is four bytes
+      // per screen pixel and would otherwise be held until the next capture.
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    setPhase("waiting");
+    setSel(null);
+    setInfo(null);
+    dragStart.current = null;
+  }, []);
+
   useEffect(() => {
     // A session may already be running when this window first mounts.
     begin().catch(() => setPhase("waiting"));
-    const un = listen<number>("capture-start", () => {
+    const started = listen<number>("capture-start", () => {
       begin().catch((e) => console.error(e));
     });
+    const ended = listen("capture-end", release);
     return () => {
-      un.then((f) => f());
+      started.then((f) => f());
+      ended.then((f) => f());
     };
-  }, [begin]);
+  }, [begin, release]);
 
   // Theme for the instruction pill / magnifier chrome
   useEffect(() => {

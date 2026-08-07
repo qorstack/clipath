@@ -77,6 +77,46 @@ pub enum CaptureMode {
     PreviousRegion,
 }
 
+/// How long Clipath stays warm after the last capture. Keeping the WebViews
+/// alive costs a few hundred megabytes; keeping them alive all day for a tool
+/// used in bursts is not a trade worth making, so they are released once the
+/// user has clearly moved on and rebuilt on the next capture.
+const IDLE_RELEASE: std::time::Duration = std::time::Duration::from_secs(180);
+
+pub fn touch_activity(app: &AppHandle) {
+    *app.state::<AppState>().last_activity.lock().unwrap() = std::time::Instant::now();
+}
+
+/// Tear down the WebViews when nothing has happened for a while. The tray
+/// icon and global shortcuts live in the Rust process and are unaffected.
+pub fn release_if_idle(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if state.capture_active.load(Ordering::SeqCst) {
+        return;
+    }
+    if state.last_activity.lock().unwrap().elapsed() < IDLE_RELEASE {
+        return;
+    }
+    let main_visible = app
+        .get_webview_window("main")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
+    if main_visible {
+        return;
+    }
+    let had_windows = overlay::any_exist(app) || app.get_webview_window("main").is_some();
+    if !had_windows {
+        return;
+    }
+    overlay::close_overlays(app);
+    if let Some(win) = app.get_webview_window("main") {
+        // destroy, not close: the close handler deliberately keeps this
+        // window alive by hiding it instead.
+        let _ = win.destroy();
+    }
+    crate::dlog("idle: released webviews");
+}
+
 /// Build overlay windows ahead of time so the first shortcut press is as fast
 /// as every later one.
 pub fn prewarm(app: &AppHandle) {
@@ -129,6 +169,7 @@ fn end_capture(app: &AppHandle) {
 
 fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
     let started = std::time::Instant::now();
+    touch_activity(app);
     *app.state::<AppState>().capture_started.lock().unwrap() = Some(started);
     let prev_focus = winutil::foreground_window();
     *app.state::<AppState>().prev_focus.lock().unwrap() = prev_focus;
@@ -244,18 +285,31 @@ fn write_region(
 /// already on screen just swaps to the new capture — resizing and recentring
 /// a window the user is working in would be disruptive.
 fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
-    let win = app
-        .get_webview_window("main")
-        .ok_or("main window unavailable")?;
-    let already_open = win.is_visible().unwrap_or(false);
+    touch_activity(app);
+    // Recorded so a main window that is still starting up can pick the
+    // capture up itself rather than racing the event below.
+    *app.state::<AppState>().pending_editor.lock().unwrap() =
+        Some(path.to_string_lossy().to_string());
+
+    let existing = app.get_webview_window("main");
+    let already_open = existing
+        .as_ref()
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
 
     if already_open {
+        let win = existing.expect("visible window exists");
         let _ = win.set_focus();
         let _ = app.emit_to("main", "open-editor", path.to_string_lossy().to_string());
         return Ok(());
     }
 
+    // show_main recreates the window if the idle sweep released it.
     tray::show_main(app, "editor");
+    let win = app
+        .get_webview_window("main")
+        .ok_or("main window unavailable")?;
+
     if let Ok((iw, ih)) = image::image_dimensions(path) {
         let (max_w, max_h) = win
             .current_monitor()
@@ -275,6 +329,12 @@ fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
     let _ = win.set_focus();
     let _ = app.emit_to("main", "open-editor", path.to_string_lossy().to_string());
     Ok(())
+}
+
+/// The capture the main window should open with, consumed as it mounts.
+#[tauri::command]
+pub fn take_pending_editor(app: AppHandle) -> Option<String> {
+    app.state::<AppState>().pending_editor.lock().unwrap().take()
 }
 
 fn do_copy_last_path(app: &AppHandle) -> Result<(), String> {
@@ -460,6 +520,17 @@ pub fn overlay_ready(app: AppHandle, monitor: usize) -> Result<(), String> {
     let win = app
         .get_webview_window(&overlay::label_for(monitor))
         .ok_or("overlay window missing")?;
+    {
+        // Idle overlays are 1x1; give this one its monitor before showing it.
+        let state = app.state::<AppState>();
+        let session = state.session.lock().unwrap();
+        let session = session.as_ref().ok_or("no capture session")?;
+        let shot = session
+            .monitors
+            .get(monitor)
+            .ok_or("monitor not in session")?;
+        overlay::expand(&win, &shot.info())?;
+    }
     win.show().map_err(|e| e.to_string())?;
     let _ = win.set_always_on_top(true);
 
@@ -644,11 +715,21 @@ pub fn save_image_as(app: AppHandle, target: String, image_base64: String) -> Re
 /// copied path can be pasted straight away.
 #[tauri::command]
 pub fn close_editor(app: AppHandle) {
+    touch_activity(&app);
+    hide_main(&app);
+    let prev = *app.state::<AppState>().prev_focus.lock().unwrap();
+    winutil::restore_foreground(prev);
+}
+
+/// Hide the main window and tell it to let go of the open capture. The window
+/// stays alive so it reopens instantly, but a decoded screenshot is several
+/// megabytes to keep around for a window nobody is looking at.
+pub fn hide_main(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.hide();
     }
-    let prev = *app.state::<AppState>().prev_focus.lock().unwrap();
-    winutil::restore_foreground(prev);
+    *app.state::<AppState>().pending_editor.lock().unwrap() = None;
+    let _ = app.emit_to("main", "editor-closed", ());
 }
 
 // ---------------------------------------------------------------------------
@@ -771,7 +852,5 @@ pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn hide_main_window(app: AppHandle) {
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.hide();
-    }
+    hide_main(&app);
 }

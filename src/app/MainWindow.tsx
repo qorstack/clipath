@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { ipc } from "../lib/ipc";
 import { SettingsProvider, useApplyTheme, useSettings } from "../lib/settings";
 import { Onboarding } from "../features/onboarding/Onboarding";
 import { SettingsWindow } from "../features/settings/SettingsWindow";
@@ -15,6 +16,18 @@ function MainContent() {
   useApplyTheme(settings);
 
   useEffect(() => {
+    // The window may have just been recreated for this capture, in which case
+    // the open-editor event fired before anything was listening.
+    ipc
+      .takePendingEditor()
+      .then((p) => {
+        if (p) {
+          setEditorPath(p);
+          setShowSettings(false);
+        }
+      })
+      .catch(console.error);
+
     const nav = listen<string>("navigate", (e) => {
       if (e.payload === "editor") return; // the open-editor event carries the path
       setPage(e.payload);
@@ -24,9 +37,13 @@ function MainContent() {
       setEditorPath(e.payload);
       setShowSettings(false);
     });
+    // Unmounting the editor when the window goes away releases the decoded
+    // screenshot and the annotation canvas rather than holding them idle.
+    const closed = listen("editor-closed", () => setEditorPath(null));
     return () => {
       nav.then((f) => f());
       open.then((f) => f());
+      closed.then((f) => f());
     };
   }, []);
 

@@ -46,15 +46,34 @@ pub fn ensure_overlays(app: &AppHandle, monitors: &[MonitorInfo]) -> Result<(), 
             .visible(false)
             .shadow(false)
             .focused(false)
+            .inner_size(IDLE_SIZE as f64, IDLE_SIZE as f64)
             .build()
             .map_err(|e| format!("cannot create capture overlay: {e}"))?;
         win.set_position(PhysicalPosition::new(m.x, m.y))
             .map_err(|e| e.to_string())?;
-        win.set_size(PhysicalSize::new(m.width, m.height))
-            .map_err(|e| e.to_string())?;
     }
     *state.overlay_layout.lock().unwrap() = layout;
     Ok(())
+}
+
+/// Idle overlays are kept tiny. The window stays alive so its WebView never
+/// has to boot again, but a full-screen compositing surface for every monitor
+/// is a lot of memory to hold while nothing is being captured.
+const IDLE_SIZE: u32 = 1;
+
+/// Give an overlay its monitor's geometry, ready to be shown.
+pub fn expand(win: &tauri::WebviewWindow, m: &MonitorInfo) -> Result<(), String> {
+    win.set_position(PhysicalPosition::new(m.x, m.y))
+        .map_err(|e| e.to_string())?;
+    win.set_size(PhysicalSize::new(m.width, m.height))
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn any_exist(app: &AppHandle) -> bool {
+    app.webview_windows()
+        .keys()
+        .any(|label| label.starts_with("overlay-"))
 }
 
 pub fn close_overlays(app: &AppHandle) {
@@ -76,10 +95,16 @@ pub fn any_visible(app: &AppHandle) -> bool {
         .any(|(label, win)| label.starts_with("overlay-") && win.is_visible().unwrap_or(false))
 }
 
+/// Put the overlays away and let them drop everything the capture needed:
+/// the frozen frame bitmap, the canvas backing store and the window surface.
 pub fn hide_overlays(app: &AppHandle) {
+    use tauri::Emitter;
     for (label, win) in app.webview_windows() {
-        if label.starts_with("overlay-") {
-            let _ = win.hide();
+        if !label.starts_with("overlay-") {
+            continue;
         }
+        let _ = win.hide();
+        let _ = app.emit_to(label.as_str(), "capture-end", ());
+        let _ = win.set_size(PhysicalSize::new(IDLE_SIZE, IDLE_SIZE));
     }
 }

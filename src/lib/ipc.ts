@@ -25,6 +25,7 @@ export const ipc = {
   cancelCapture: () => invoke<void>("cancel_capture"),
 
   // editor
+  takePendingEditor: () => invoke<string | null>("take_pending_editor"),
   readImage: (path: string) => invoke<ArrayBuffer>("read_image", { path }),
   finalizeImage: (path: string, action: FinalAction, imageBase64: string) =>
     invoke<string>("finalize_image", { path, action, imageBase64 }),
