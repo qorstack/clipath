@@ -116,7 +116,7 @@ export function CropBox({
   );
 }
 
-function resize(
+export function resize(
   orig: CropRect,
   mode: string,
   dx: number,

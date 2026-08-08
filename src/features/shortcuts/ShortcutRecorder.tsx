@@ -1,57 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ipc } from "../../lib/ipc";
-
-/** Convert a KeyboardEvent into a canonical "Ctrl+Shift+A" style string, or
- * null while only modifiers are held. */
-export function eventToShortcut(e: KeyboardEvent): string | null {
-  const mods: string[] = [];
-  if (e.ctrlKey) mods.push("Ctrl");
-  if (e.altKey) mods.push("Alt");
-  if (e.shiftKey) mods.push("Shift");
-  if (e.metaKey) mods.push("Win");
-
-  const code = e.code;
-  if (["ControlLeft", "ControlRight", "AltLeft", "AltRight", "ShiftLeft", "ShiftRight", "MetaLeft", "MetaRight"].includes(code)) {
-    return null;
-  }
-  let key: string;
-  if (code.startsWith("Key")) key = code.slice(3);
-  else if (code.startsWith("Digit")) key = code.slice(5);
-  else key = code; // F1..F24, Space, Home, ArrowUp, PrintScreen, ...
-  if (!key) return null;
-  return [...mods, key].join("+");
-}
-
-const KEY_LABELS: Record<string, string> = {
-  Comma: ",",
-  Period: ".",
-  Slash: "/",
-  Semicolon: ";",
-  Quote: "'",
-  BracketLeft: "[",
-  BracketRight: "]",
-  Backslash: "\\",
-  Minus: "-",
-  Equal: "=",
-  Backquote: "`",
-};
-
-/** Render W3C key codes the way a user reads them: "Comma" -> ",". */
-export function humanize(shortcut: string): string {
-  return shortcut
-    .split("+")
-    .map((p) => KEY_LABELS[p] ?? p)
-    .join("+");
-}
-
-function isSafeGlobal(shortcut: string): boolean {
-  const parts = shortcut.split("+");
-  const key = parts[parts.length - 1];
-  const hasMod = parts.length > 1;
-  // Allow F-keys and PrintScreen without modifiers; anything else needs one.
-  if (/^F\d{1,2}$/.test(key) || key === "PrintScreen") return true;
-  return hasMod && !["Shift"].every((m) => parts.slice(0, -1).includes(m) && parts.length === 2 && m === "Shift");
-}
+import { eventToShortcut, humanize, isSafeGlobal } from "./keys";
 
 export function ShortcutRecorder({
   value,

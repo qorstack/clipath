@@ -126,3 +126,117 @@ pub fn action_for_shortcut(app: &AppHandle, shortcut: &Shortcut) -> Option<Strin
         .find(|(sc, _)| sc == shortcut)
         .map(|(_, action)| action.clone())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn letters_become_physical_key_codes() {
+        // Not the character: on a Thai layout the character under that key is
+        // not "A", but the physical code still is KeyA.
+        assert_eq!(normalize("Ctrl+Shift+A").unwrap(), "control+shift+KeyA");
+        assert_eq!(normalize("ctrl+shift+a").unwrap(), "control+shift+KeyA");
+    }
+
+    #[test]
+    fn every_modifier_spelling_is_accepted() {
+        assert_eq!(normalize("Control+Q").unwrap(), "control+KeyQ");
+        assert_eq!(normalize("Alt+Q").unwrap(), "alt+KeyQ");
+        assert_eq!(normalize("Win+Q").unwrap(), "super+KeyQ");
+        assert_eq!(normalize("Cmd+Q").unwrap(), "super+KeyQ");
+        assert_eq!(normalize("Meta+Q").unwrap(), "super+KeyQ");
+    }
+
+    #[test]
+    fn digits_and_named_codes_pass_through() {
+        assert_eq!(normalize("Ctrl+1").unwrap(), "control+Digit1");
+        assert_eq!(normalize("Ctrl+F5").unwrap(), "control+F5");
+        assert_eq!(normalize("PrintScreen").unwrap(), "PrintScreen");
+        assert_eq!(normalize("Ctrl+Shift+Comma").unwrap(), "control+shift+Comma");
+    }
+
+    #[test]
+    fn whitespace_and_empty_segments_are_tolerated() {
+        assert_eq!(normalize(" Ctrl + Shift + A ").unwrap(), "control+shift+KeyA");
+    }
+
+    #[test]
+    fn rejects_input_with_no_key() {
+        assert!(normalize("").is_none());
+        assert!(normalize("Ctrl+Shift").is_none());
+        assert!(normalize("Ctrl++").is_none());
+    }
+
+    #[test]
+    fn rejects_punctuation_that_is_not_a_code_name() {
+        assert!(normalize("Ctrl+,").is_none());
+    }
+
+    #[test]
+    fn every_default_shortcut_parses_into_a_real_binding() {
+        // A default that cannot be registered would leave an action with no
+        // way to reach it, which is how they shipped unbound the first time.
+        let d = crate::settings::Shortcuts::default();
+        for raw in [
+            d.region,
+            d.fullscreen,
+            d.active_window,
+            d.previous_region,
+            d.copy_last_path,
+            d.open_folder,
+            d.open_settings,
+        ] {
+            let raw = raw.expect("every action ships with a default binding");
+            let n = normalize(&raw).unwrap_or_else(|| panic!("{raw} did not normalize"));
+            n.parse::<Shortcut>()
+                .unwrap_or_else(|_| panic!("{raw} -> {n} did not parse"));
+        }
+    }
+
+    #[test]
+    fn defaults_do_not_collide_with_each_other() {
+        let d = crate::settings::Shortcuts::default();
+        let all = [
+            d.region,
+            d.fullscreen,
+            d.active_window,
+            d.previous_region,
+            d.copy_last_path,
+            d.open_folder,
+            d.open_settings,
+        ];
+        let mut seen = std::collections::HashSet::new();
+        for raw in all.into_iter().flatten() {
+            assert!(seen.insert(normalize(&raw).unwrap()), "{raw} bound twice");
+        }
+    }
+
+    #[test]
+    fn defaults_leave_the_editors_own_copy_bindings_free() {
+        // Ctrl+C / Ctrl+Shift+C are the editor's Copy Path and Copy Image. A
+        // global binding on either would swallow them app-wide.
+        let d = crate::settings::Shortcuts::default();
+        for raw in [d.region, d.fullscreen, d.active_window, d.previous_region,
+                    d.copy_last_path, d.open_folder, d.open_settings]
+            .into_iter()
+            .flatten()
+        {
+            let n = normalize(&raw).unwrap();
+            assert_ne!(n, "control+KeyC");
+            assert_ne!(n, "control+shift+KeyC");
+        }
+    }
+
+    #[test]
+    fn shortcut_lookup_covers_every_dispatchable_action() {
+        let s = crate::settings::Settings::default();
+        for action in ACTIONS {
+            assert!(
+                shortcut_for(&s, action).is_some(),
+                "{action} has no shortcut slot"
+            );
+        }
+        assert!(shortcut_for(&s, "not-an-action").is_none());
+    }
+}

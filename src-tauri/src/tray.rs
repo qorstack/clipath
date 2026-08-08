@@ -134,7 +134,7 @@ pub fn create_tray(app: &AppHandle, settings: &Settings) -> tauri::Result<()> {
             "open-folder" => commands::run_action(app.clone(), "open-folder"),
             "settings" => show_main(app, "general"),
             "about" => show_main(app, "about"),
-            "quit" => app.exit(0),
+            "quit" => commands::quit(app.clone()),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| match event {
@@ -207,6 +207,33 @@ pub fn show_main(app: &AppHandle, page: &str) {
     let _ = win.show();
     let _ = win.unminimize();
     let _ = win.set_focus();
+    // set_focus alone loses to focus-stealing prevention when the request came
+    // from a global shortcut or the tray, which would leave the window sitting
+    // behind the app the user is looking at.
+    if let Ok(hwnd) = win.hwnd() {
+        crate::winutil::force_foreground(hwnd.0 as isize);
+    }
     use tauri::Emitter;
     let _ = app.emit_to("main", "navigate", page.to_string());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn code_names_are_shown_as_the_key_the_user_presses() {
+        assert_eq!(humanize("Ctrl+Shift+Comma"), "Ctrl+Shift+,");
+        assert_eq!(humanize("Ctrl+Period"), "Ctrl+.");
+        assert_eq!(humanize("Ctrl+Slash"), "Ctrl+/");
+        assert_eq!(humanize("Ctrl+BracketLeft"), "Ctrl+[");
+        assert_eq!(humanize("Alt+Backquote"), "Alt+`");
+    }
+
+    #[test]
+    fn ordinary_keys_are_left_alone() {
+        assert_eq!(humanize("Ctrl+Shift+A"), "Ctrl+Shift+A");
+        assert_eq!(humanize("Ctrl+F5"), "Ctrl+F5");
+        assert_eq!(humanize("Ctrl+Space"), "Ctrl+Space");
+    }
 }

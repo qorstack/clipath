@@ -24,6 +24,10 @@ pub struct General {
     pub minimize_to_tray: bool,
     pub notifications: bool,
     pub capture_sound: bool,
+    /// Whether the user has been told that closing the window leaves Clipath
+    /// running. Shown once, because a tray-only app that vanishes from the
+    /// taskbar otherwise looks like it quit.
+    pub tray_hint_shown: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +121,7 @@ impl Default for General {
             minimize_to_tray: true,
             notifications: true,
             capture_sound: false,
+            tray_hint_shown: false,
         }
     }
 }
@@ -257,7 +262,7 @@ pub fn load(app: &tauri::AppHandle) -> Settings {
 
 /// Bring older settings files forward. v1 shipped with only the region
 /// shortcut bound; v2 gives every action a default binding.
-fn migrate(settings: &mut Settings) {
+pub(crate) fn migrate(settings: &mut Settings) {
     if settings.schema_version < 2 {
         let d = Shortcuts::default();
         let s = &mut settings.shortcuts;
@@ -293,4 +298,117 @@ pub fn save(app: &tauri::AppHandle, settings: &Settings) -> Result<(), String> {
     fs::write(&tmp, json).map_err(|e| format!("cannot write settings: {e}"))?;
     fs::rename(&tmp, &path).map_err(|e| format!("cannot write settings: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn migrated(json: &str) -> Settings {
+        let mut s: Settings = serde_json::from_str(json).expect("settings should parse");
+        migrate(&mut s);
+        s
+    }
+
+    #[test]
+    fn an_empty_object_yields_the_full_defaults() {
+        // Every field is `default`, so a truncated or hand-edited file still
+        // produces a usable configuration rather than failing to load.
+        let s = migrated("{}");
+        assert_eq!(s.schema_version, SCHEMA_VERSION);
+        assert_eq!(s.output.format, "png");
+        assert_eq!(s.annotations.stroke_width, 3.0);
+        assert!(s.general.minimize_to_tray);
+    }
+
+    #[test]
+    fn unknown_fields_do_not_break_loading() {
+        // A file written by a newer build must not brick an older one.
+        let s = migrated(r#"{"somethingFromTheFuture": 1, "output": {"quality": 50}}"#);
+        assert_eq!(s.output.quality, 50);
+    }
+
+    #[test]
+    fn v1_gains_a_binding_for_every_action() {
+        // v1 shipped with only the region shortcut bound, leaving the rest
+        // reachable from the tray alone.
+        let s = migrated(r#"{"schemaVersion": 1, "shortcuts": {"region": "Ctrl+Shift+A"}}"#);
+        assert_eq!(s.shortcuts.region.as_deref(), Some("Ctrl+Shift+A"));
+        assert!(s.shortcuts.fullscreen.is_some());
+        assert!(s.shortcuts.active_window.is_some());
+        assert!(s.shortcuts.previous_region.is_some());
+        assert!(s.shortcuts.copy_last_path.is_some());
+        assert!(s.shortcuts.open_folder.is_some());
+        assert!(s.shortcuts.open_settings.is_some());
+    }
+
+    #[test]
+    fn migration_never_overwrites_a_binding_the_user_chose() {
+        let s = migrated(r#"{"schemaVersion": 1, "shortcuts": {"fullscreen": "Alt+F9"}}"#);
+        assert_eq!(s.shortcuts.fullscreen.as_deref(), Some("Alt+F9"));
+    }
+
+    #[test]
+    fn v2_moves_copy_last_path_off_the_editors_copy_image_key() {
+        let s = migrated(r#"{"schemaVersion": 2, "shortcuts": {"copyLastPath": "Ctrl+Shift+C"}}"#);
+        assert_ne!(s.shortcuts.copy_last_path.as_deref(), Some("Ctrl+Shift+C"));
+        assert_eq!(s.shortcuts.copy_last_path.as_deref(), Some("Ctrl+Shift+P"));
+    }
+
+    #[test]
+    fn a_removed_final_action_falls_back_instead_of_wedging_the_editor() {
+        // "pin" was a real setting before Pin to Screen was dropped; leaving
+        // it in place would make the primary editor button do nothing.
+        let s = migrated(r#"{"schemaVersion": 3, "output": {"defaultFinalAction": "pin"}}"#);
+        assert_eq!(s.output.default_final_action, "copy-path");
+    }
+
+    #[test]
+    fn a_current_file_passes_through_untouched() {
+        let mut original = Settings::default();
+        original.onboarding_completed = true;
+        original.output.folder = r"C:\shots".into();
+        original.appearance.accent = "#0A84FF".into();
+
+        let json = serde_json::to_string(&original).unwrap();
+        let round_tripped = migrated(&json);
+
+        assert!(round_tripped.onboarding_completed);
+        assert_eq!(round_tripped.output.folder, r"C:\shots");
+        assert_eq!(round_tripped.appearance.accent, "#0A84FF");
+    }
+
+    #[test]
+    fn the_tray_hint_defaults_to_unshown_for_existing_installs() {
+        // Users upgrading into the tray-hint build have never seen it.
+        let s = migrated(r#"{"schemaVersion": 3, "general": {"notifications": false}}"#);
+        assert!(!s.general.tray_hint_shown);
+        assert!(!s.general.notifications);
+    }
+
+    #[test]
+    fn serialization_uses_the_camel_case_the_frontend_reads() {
+        let json = serde_json::to_string(&Settings::default()).unwrap();
+        for key in [
+            "schemaVersion",
+            "onboardingCompleted",
+            "minimizeToTray",
+            "trayHintShown",
+            "filenamePattern",
+            "defaultFinalAction",
+            "copyLastPath",
+        ] {
+            assert!(json.contains(&format!("\"{key}\"")), "missing {key}");
+        }
+    }
+
+    #[test]
+    fn the_default_filename_pattern_is_sortable_and_unique() {
+        let p = &Output::default().filename_pattern;
+        // Recent falls back to name order, and two captures in the same second
+        // must not collide, so the pattern needs date, time and milliseconds.
+        for token in ["{yyyy}", "{MM}", "{dd}", "{HH}", "{mm}", "{ss}", "{fff}"] {
+            assert!(p.contains(token), "pattern is missing {token}");
+        }
+    }
 }

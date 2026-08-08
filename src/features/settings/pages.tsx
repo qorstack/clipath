@@ -26,9 +26,12 @@ export function GeneralPage() {
         </Row>
         <Row
           title="Keep Clipath running in system tray"
-          subtitle="Clipath stays available for the capture shortcut"
+          subtitle="Closing the window hides it instead of quitting, so the capture shortcut keeps working"
         >
-          <Toggle checked={g.minimizeToTray} onChange={() => {}} disabled />
+          <Toggle
+            checked={g.minimizeToTray}
+            onChange={(v) => update({ general: { minimizeToTray: v } })}
+          />
         </Row>
         <Row title="Show capture completion notification">
           <Toggle

@@ -22,6 +22,7 @@ export interface Settings {
     minimizeToTray: boolean;
     notifications: boolean;
     captureSound: boolean;
+    trayHintShown: boolean;
   };
   capture: {
     defaultMode: string;

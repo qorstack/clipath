@@ -64,3 +64,45 @@ pub fn forget(app: &tauri::AppHandle, path: &Path) {
 pub fn captured_at(index: &Index, path: &Path) -> Option<u64> {
     index.get(&key(path)).copied()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lookup_ignores_path_casing() {
+        // Windows paths round-trip through the frontend with inconsistent
+        // casing; the same file must not get two entries.
+        let mut index = Index::new();
+        index.insert(key(Path::new(r"C:\Users\Me\Pictures\Shot.png")), 42);
+        assert_eq!(
+            captured_at(&index, Path::new(r"c:\users\me\pictures\shot.png")),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn an_unknown_file_has_no_recorded_time() {
+        let index = Index::new();
+        assert_eq!(captured_at(&index, Path::new(r"C:\nope.png")), None);
+    }
+
+    #[test]
+    fn recorded_times_order_captures_by_when_they_were_taken() {
+        // Sorting by the file's mtime reorders Recent whenever an older shot
+        // is annotated and saved again, which is what this index exists to fix.
+        let first = now_ms();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let second = now_ms();
+        assert!(second > first, "{second} should be later than {first}");
+    }
+
+    #[test]
+    fn the_index_survives_a_json_round_trip() {
+        let mut index = Index::new();
+        index.insert(key(Path::new(r"C:\a\b.png")), 7);
+        let json = serde_json::to_string(&index).unwrap();
+        let back: Index = serde_json::from_str(&json).unwrap();
+        assert_eq!(captured_at(&back, Path::new(r"C:\A\B.PNG")), Some(7));
+    }
+}

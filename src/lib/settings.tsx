@@ -9,6 +9,7 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { ipc } from "./ipc";
 import type { Settings } from "../types";
+import { deepMerge, type DeepPartial } from "./merge";
 
 interface SettingsCtx {
   settings: Settings | null;
@@ -17,34 +18,11 @@ interface SettingsCtx {
   replace: (next: Settings) => Promise<string[]>;
 }
 
-export type DeepPartial<T> = {
-  [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
-};
-
 const Ctx = createContext<SettingsCtx>({
   settings: null,
   update: async () => [],
   replace: async () => [],
 });
-
-function deepMerge<T>(base: T, patch: DeepPartial<T>): T {
-  const out: any = Array.isArray(base) ? [...(base as any)] : { ...base };
-  for (const key of Object.keys(patch as any)) {
-    const value = (patch as any)[key];
-    if (
-      value !== null &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      typeof out[key] === "object" &&
-      out[key] !== null
-    ) {
-      out[key] = deepMerge(out[key], value);
-    } else {
-      out[key] = value;
-    }
-  }
-  return out;
-}
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings | null>(null);

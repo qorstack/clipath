@@ -9,26 +9,7 @@ import type { Ann, CounterAnn, FinalAction, RecentItem, Settings, TextAnn, Tool 
 import { AnnotationStage, type CropRect } from "../capture/AnnotationStage";
 import { ActionBar, Toolbar } from "../capture/Toolbar";
 import { CropBox, RATIOS, fitRatio } from "./CropBox";
-
-/**
- * Keyed by physical key position, not by the character produced. Reading
- * `event.key` breaks every shortcut the moment the keyboard layout is not
- * Latin — on a Thai layout the T key reports "ะ" and matches nothing.
- */
-const TOOL_KEYS: Record<string, Tool> = {
-  KeyV: "select",
-  KeyC: "crop",
-  KeyA: "arrow",
-  KeyL: "line",
-  KeyR: "rect",
-  KeyO: "ellipse",
-  KeyP: "pen",
-  KeyH: "highlighter",
-  KeyT: "text",
-  KeyB: "blur",
-  KeyX: "pixelate",
-  KeyN: "counter",
-};
+import { TOOL_KEYS } from "./keymap";
 
 const MIME: Record<string, string> = {
   png: "image/png",
@@ -323,10 +304,16 @@ export function Editor({
     [path, applyPending],
   );
 
-  // Closing the window from the title bar must not silently discard work.
+  // Closing the window from the title bar must not silently discard work, and
+  // must not let the window go either. Without preventDefault the JS layer
+  // destroys it as soon as this handler resolves — behind Rust's back, so the
+  // hide-to-tray rule is bypassed and the next capture has to rebuild the
+  // whole WebView before it can show anything.
   useEffect(() => {
-    const un = getCurrentWindow().onCloseRequested(async () => {
+    const un = getCurrentWindow().onCloseRequested(async (event) => {
+      event.preventDefault();
       await applyPending();
+      await ipc.closeEditor();
     });
     return () => {
       un.then((f) => f());

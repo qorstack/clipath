@@ -1,5 +1,6 @@
 import Konva from "konva";
 import { useEffect, useRef, useState } from "react";
+import { lockAxis, snapToAngle, squareOf } from "./geometry";
 import {
   Stage,
   Layer,
@@ -180,43 +181,25 @@ export function AnnotationStage(props: StageProps) {
     const shift = e.evt.shiftKey;
 
     if (draft.type === "arrow" || draft.type === "line") {
-      let ex = x;
-      let ey = y;
-      if (shift) {
-        const dx = x - draft.points[0];
-        const dy = y - draft.points[1];
-        const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
-        const len = Math.hypot(dx, dy);
-        ex = draft.points[0] + Math.cos(angle) * len;
-        ey = draft.points[1] + Math.sin(angle) * len;
-      }
-      setDraft({ ...draft, points: [draft.points[0], draft.points[1], ex, ey] });
+      const [sx, sy] = draft.points;
+      const end = shift ? snapToAngle(sx, sy, x, y) : { x, y };
+      setDraft({ ...draft, points: [sx, sy, end.x, end.y] });
     } else if (
       draft.type === "rect" ||
       draft.type === "ellipse" ||
       draft.type === "blur" ||
       draft.type === "pixelate"
     ) {
-      let w = x - draft.x;
-      let h = y - draft.y;
-      if (shift) {
-        const m = Math.max(Math.abs(w), Math.abs(h));
-        w = Math.sign(w || 1) * m;
-        h = Math.sign(h || 1) * m;
-      }
+      const raw = { w: x - draft.x, h: y - draft.y };
+      const { w, h } = shift ? squareOf(raw.w, raw.h) : raw;
       setDraft({ ...draft, w, h });
     } else if (draft.type === "pen" || draft.type === "highlighter") {
       if (shift) {
-        const sx = draft.points[0];
-        const sy = draft.points[1];
-        const dx = x - sx;
-        const dy = y - sy;
-        const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
-        const len = Math.hypot(dx, dy);
-        setDraft({
-          ...draft,
-          points: [sx, sy, sx + Math.cos(angle) * len, sy + Math.sin(angle) * len],
-        });
+        // A straight stroke replaces the freehand trail rather than extending
+        // it, so Shift mid-stroke gives a clean line from where it started.
+        const [sx, sy] = draft.points;
+        const end = snapToAngle(sx, sy, x, y);
+        setDraft({ ...draft, points: [sx, sy, end.x, end.y] });
       } else {
         setDraft({ ...draft, points: [...draft.points, x, y] });
       }
@@ -399,10 +382,9 @@ function AnnNode({
     onDragMove: (e: Konva.KonvaEventObject<DragEvent>) => {
       const o = dragOrigin.current;
       if (!o || !e.evt.shiftKey) return;
-      const dx = e.target.x() - o.x;
-      const dy = e.target.y() - o.y;
-      if (Math.abs(dx) > Math.abs(dy)) e.target.y(o.y);
-      else e.target.x(o.x);
+      const locked = lockAxis(e.target.x() - o.x, e.target.y() - o.y);
+      e.target.x(o.x + locked.dx);
+      e.target.y(o.y + locked.dy);
     },
     onClick: () => selectable && setSelectedId(ann.id),
     onMouseEnter: (e: Konva.KonvaEventObject<MouseEvent>) => {

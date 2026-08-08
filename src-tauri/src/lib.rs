@@ -42,6 +42,10 @@ pub struct AppState {
     pub last_activity: Mutex<std::time::Instant>,
     /// Capture waiting to be shown, read by the main window as it mounts.
     pub pending_editor: Mutex<Option<String>>,
+    /// Set only by Quit. Every other route out of the event loop — the last
+    /// window closing, the idle sweep tearing the WebViews down, a plugin
+    /// asking to exit — is refused, so Clipath survives in the tray.
+    pub quitting: std::sync::atomic::AtomicBool,
 }
 
 pub fn run() {
@@ -83,6 +87,7 @@ pub fn run() {
                 capture_started: Mutex::new(None),
                 last_activity: Mutex::new(std::time::Instant::now()),
                 pending_editor: Mutex::new(None),
+                quitting: std::sync::atomic::AtomicBool::new(false),
             });
             tray::create_tray(&handle, &loaded)?;
             let errors = shortcuts::register_all(&handle, &loaded);
@@ -121,14 +126,24 @@ pub fn run() {
             // The main window hides to the tray instead of closing, handing
             // focus back so a just-copied path can be pasted straight away.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
-                    api.prevent_close();
-                    let app = window.app_handle();
-                    commands::hide_main(app);
-                    if let Some(state) = app.try_state::<AppState>() {
-                        let prev = *state.prev_focus.lock().unwrap();
-                        winutil::restore_foreground(prev);
-                    }
+                if window.label() != "main" {
+                    return;
+                }
+                let app = window.app_handle();
+                let keep = app
+                    .try_state::<AppState>()
+                    .map(|s| s.settings.lock().unwrap().general.minimize_to_tray)
+                    .unwrap_or(true);
+                if !keep {
+                    commands::quit(app.clone());
+                    return;
+                }
+                api.prevent_close();
+                commands::hide_main(app);
+                commands::hint_still_running(app);
+                if let Some(state) = app.try_state::<AppState>() {
+                    let prev = *state.prev_focus.lock().unwrap();
+                    winutil::restore_foreground(prev);
                 }
             }
         })
@@ -160,13 +175,20 @@ pub fn run() {
             commands::reveal_in_folder,
             commands::open_path,
             commands::hide_main_window,
+            commands::quit,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Clipath")
-        .run(|_app, event| {
+        .run(|app, event| {
             // Keep running in the tray when every window is closed or hidden.
-            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-                if code.is_none() {
+            // Only Quit is allowed through: the idle sweep destroys the last
+            // WebView on purpose, and that must not take the process with it.
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let quitting = app
+                    .try_state::<AppState>()
+                    .map(|s| s.quitting.load(std::sync::atomic::Ordering::SeqCst))
+                    .unwrap_or(false);
+                if !quitting {
                     api.prevent_exit();
                 }
             }

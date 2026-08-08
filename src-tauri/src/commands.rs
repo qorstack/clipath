@@ -331,6 +331,9 @@ fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
     if already_open {
         let win = existing.expect("visible window exists");
         let _ = win.set_focus();
+        if let Ok(hwnd) = win.hwnd() {
+            winutil::force_foreground(hwnd.0 as isize);
+        }
         let _ = app.emit_to("main", "open-editor", path.to_string_lossy().to_string());
         return Ok(());
     }
@@ -358,6 +361,11 @@ fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
         let _ = win.center();
     }
     let _ = win.set_focus();
+    // The window was moved and resized after show_main brought it forward, so
+    // claim the foreground again now it is where it will stay.
+    if let Ok(hwnd) = win.hwnd() {
+        winutil::force_foreground(hwnd.0 as isize);
+    }
     let _ = app.emit_to("main", "open-editor", path.to_string_lossy().to_string());
     Ok(())
 }
@@ -763,6 +771,45 @@ pub fn hide_main(app: &AppHandle) {
     let _ = app.emit_to("main", "editor-closed", ());
 }
 
+/// Tell the user once that closing the window did not quit Clipath. Hiding to
+/// the tray takes the taskbar entry away too, and the tray icon starts life in
+/// the Windows overflow, so without this the app looks like it exited.
+pub fn hint_still_running(app: &AppHandle) {
+    let (already, shortcut) = {
+        let state = app.state::<AppState>();
+        let s = state.settings.lock().unwrap();
+        (
+            s.general.tray_hint_shown,
+            s.shortcuts.region.clone().unwrap_or_default(),
+        )
+    };
+    if already {
+        return;
+    }
+    let body = if shortcut.is_empty() {
+        "Clipath is still running in the system tray.".to_string()
+    } else {
+        format!("Clipath is still running in the system tray — press {shortcut} to capture.")
+    };
+    // Deliberately not gated on the notification setting: this is a one-off
+    // explanation of where the app went, not a per-capture notice.
+    let _ = app.notification().builder().title("Clipath").body(body).show();
+    let state = app.state::<AppState>();
+    let mut s = state.settings.lock().unwrap();
+    s.general.tray_hint_shown = true;
+    let _ = settings::save(app, &s);
+}
+
+/// The one sanctioned way out. Everything else that could end the event loop
+/// is refused so the tray icon survives.
+#[tauri::command]
+pub fn quit(app: AppHandle) {
+    app.state::<AppState>()
+        .quitting
+        .store(true, Ordering::SeqCst);
+    app.exit(0);
+}
+
 // ---------------------------------------------------------------------------
 // Files / clipboard / history commands
 // ---------------------------------------------------------------------------
@@ -885,4 +932,100 @@ pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn hide_main_window(app: AppHandle) {
     hide_main(&app);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Two monitors side by side, the second one to the right of the first.
+    fn two_monitors() -> Vec<capture::MonitorShot> {
+        vec![
+            capture::MonitorShot {
+                index: 0,
+                x: 0,
+                y: 0,
+                width: 2560,
+                height: 1440,
+                scale: 1.0,
+                is_primary: true,
+                image: image::RgbaImage::new(1, 1),
+            },
+            capture::MonitorShot {
+                index: 1,
+                x: 2560,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                scale: 1.0,
+                is_primary: false,
+                image: image::RgbaImage::new(1, 1),
+            },
+        ]
+    }
+
+    #[test]
+    fn a_point_resolves_to_the_monitor_containing_it() {
+        let m = two_monitors();
+        assert_eq!(monitor_at(&m, 10, 10), 0);
+        assert_eq!(monitor_at(&m, 3000, 500), 1);
+    }
+
+    #[test]
+    fn monitor_edges_belong_to_exactly_one_screen() {
+        // 2560 is the first pixel of the second monitor, not the last of the
+        // first: an off-by-one here sends the capture to the wrong overlay.
+        let m = two_monitors();
+        assert_eq!(monitor_at(&m, 2559, 0), 0);
+        assert_eq!(monitor_at(&m, 2560, 0), 1);
+    }
+
+    #[test]
+    fn a_point_off_every_monitor_falls_back_to_the_primary() {
+        let m = two_monitors();
+        assert_eq!(monitor_at(&m, -500, -500), 0);
+        assert_eq!(monitor_at(&m, 99_999, 99_999), 0);
+    }
+
+    #[test]
+    fn a_negative_layout_still_resolves() {
+        // A monitor placed to the left of the primary has negative origins.
+        let m = vec![
+            capture::MonitorShot {
+                index: 0,
+                x: -1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                scale: 1.0,
+                is_primary: false,
+                image: image::RgbaImage::new(1, 1),
+            },
+            capture::MonitorShot {
+                index: 1,
+                x: 0,
+                y: 0,
+                width: 2560,
+                height: 1440,
+                scale: 1.0,
+                is_primary: true,
+                image: image::RgbaImage::new(1, 1),
+            },
+        ];
+        assert_eq!(monitor_at(&m, -100, 100), 0);
+        assert_eq!(monitor_at(&m, 100, 100), 1);
+    }
+
+    #[test]
+    fn overlay_labels_round_trip_through_the_window_label() {
+        // The frontend recovers the monitor index by stripping the prefix; when
+        // that parsing drifted, every overlay reported monitor 0 and captures
+        // only worked on one screen.
+        for index in [0usize, 1, 7] {
+            let label = overlay::label_for(index);
+            assert!(label.starts_with("overlay-"));
+            let parsed: usize = label.trim_start_matches("overlay-").parse().unwrap();
+            assert_eq!(parsed, index);
+        }
+    }
 }
