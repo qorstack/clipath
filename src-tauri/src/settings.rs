@@ -96,7 +96,7 @@ pub struct Recent {
     pub limit: u32,
 }
 
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 impl Default for Settings {
     fn default() -> Self {
@@ -172,19 +172,39 @@ impl Default for Output {
     }
 }
 
+/// The bindings v3 and earlier shipped with. A global shortcut wins over the
+/// focused application, so every one of these quietly took a key that editors
+/// and browsers use for themselves: hard reload, find in files, the command
+/// palette. They are recognised on upgrade so they can be moved off.
+pub(crate) const LEGACY_SHORTCUTS: &[(&str, &str)] = &[
+    ("region", "Ctrl+Shift+A"),
+    ("fullscreen", "Ctrl+Shift+F"),
+    ("activeWindow", "Ctrl+Shift+E"),
+    ("previousRegion", "Ctrl+Shift+R"),
+    ("copyLastPath", "Ctrl+Shift+P"),
+    ("openFolder", "Ctrl+Shift+O"),
+    ("openSettings", "Ctrl+Shift+Comma"),
+];
+
 impl Default for Shortcuts {
     fn default() -> Self {
         Self {
-            // Ctrl+Shift+W / +S are commonly claimed by other apps, so the
-            // window and settings actions use less contested keys.
-            region: Some("Ctrl+Shift+A".into()),
-            fullscreen: Some("Ctrl+Shift+F".into()),
-            active_window: Some("Ctrl+Shift+E".into()),
-            previous_region: Some("Ctrl+Shift+R".into()),
-            // Ctrl+Shift+C is left free for Copy Image inside the editor.
-            copy_last_path: Some("Ctrl+Shift+P".into()),
-            open_folder: Some("Ctrl+Shift+O".into()),
-            open_settings: Some("Ctrl+Shift+Comma".into()),
+            // Print Screen and its modifiers: no application binds them for
+            // anything of its own, so claiming them globally takes nothing
+            // away — unlike Ctrl+Shift+letter, where every combination is
+            // already something in an editor or a browser. One key is also
+            // the easiest thing there is to press.
+            region: Some("PrintScreen".into()),
+            fullscreen: Some("Ctrl+PrintScreen".into()),
+            // Windows already means "the active window" by this one.
+            active_window: Some("Alt+PrintScreen".into()),
+            previous_region: Some("Ctrl+Shift+PrintScreen".into()),
+            // The three that are not captures have no Print Screen left, so
+            // they take Ctrl+Alt, which applications leave alone far more
+            // often than Ctrl+Shift.
+            copy_last_path: Some("Ctrl+Alt+C".into()),
+            open_folder: Some("Ctrl+Alt+F".into()),
+            open_settings: Some("Ctrl+Alt+Comma".into()),
         }
     }
 }
@@ -281,6 +301,28 @@ pub(crate) fn migrate(settings: &mut Settings) {
             settings.shortcuts.copy_last_path = Some("Ctrl+Shift+P".into());
         }
     }
+    if settings.schema_version < 4 {
+        // Move off the Ctrl+Shift+letter defaults, which were swallowing keys
+        // the focused application needed. Only bindings still sitting on an old
+        // default are touched: anything the user chose themselves is theirs.
+        let d = Shortcuts::default();
+        let s = &mut settings.shortcuts;
+        let legacy = |slot: &mut Option<String>, action: &str, new: Option<String>| {
+            let was_default = LEGACY_SHORTCUTS
+                .iter()
+                .any(|(a, old)| *a == action && slot.as_deref() == Some(*old));
+            if was_default {
+                *slot = new;
+            }
+        };
+        legacy(&mut s.region, "region", d.region);
+        legacy(&mut s.fullscreen, "fullscreen", d.fullscreen);
+        legacy(&mut s.active_window, "activeWindow", d.active_window);
+        legacy(&mut s.previous_region, "previousRegion", d.previous_region);
+        legacy(&mut s.copy_last_path, "copyLastPath", d.copy_last_path);
+        legacy(&mut s.open_folder, "openFolder", d.open_folder);
+        legacy(&mut s.open_settings, "openSettings", d.open_settings);
+    }
     // Pin to screen was removed; fall back to the default action.
     if settings.output.default_final_action == "pin" {
         settings.output.default_final_action = "copy-path".into();
@@ -333,7 +375,9 @@ mod tests {
         // v1 shipped with only the region shortcut bound, leaving the rest
         // reachable from the tray alone.
         let s = migrated(r#"{"schemaVersion": 1, "shortcuts": {"region": "Ctrl+Shift+A"}}"#);
-        assert_eq!(s.shortcuts.region.as_deref(), Some("Ctrl+Shift+A"));
+        // Carried all the way to v4, so region has also moved off the binding
+        // that was taking the key from the focused application.
+        assert_eq!(s.shortcuts.region.as_deref(), Some("PrintScreen"));
         assert!(s.shortcuts.fullscreen.is_some());
         assert!(s.shortcuts.active_window.is_some());
         assert!(s.shortcuts.previous_region.is_some());
@@ -351,8 +395,54 @@ mod tests {
     #[test]
     fn v2_moves_copy_last_path_off_the_editors_copy_image_key() {
         let s = migrated(r#"{"schemaVersion": 2, "shortcuts": {"copyLastPath": "Ctrl+Shift+C"}}"#);
+        // v2 moved it to Ctrl+Shift+P; v4 then moved it off that too. What has
+        // to hold either way is that it is not on the editor's Copy Image key.
         assert_ne!(s.shortcuts.copy_last_path.as_deref(), Some("Ctrl+Shift+C"));
-        assert_eq!(s.shortcuts.copy_last_path.as_deref(), Some("Ctrl+Shift+P"));
+        assert_eq!(
+            s.shortcuts.copy_last_path,
+            Shortcuts::default().copy_last_path
+        );
+    }
+
+    #[test]
+    fn v3_moves_off_the_shortcuts_that_stole_keys_from_the_focused_app() {
+        // Ctrl+Shift+R is hard reload, Ctrl+Shift+P is the command palette. A
+        // global binding wins over the application, so these were taking them.
+        let s = migrated(r#"{"schemaVersion": 3, "shortcuts": {
+            "region": "Ctrl+Shift+A",
+            "previousRegion": "Ctrl+Shift+R",
+            "copyLastPath": "Ctrl+Shift+P"
+        }}"#);
+        assert_eq!(s.shortcuts.region.as_deref(), Some("PrintScreen"));
+        assert_ne!(s.shortcuts.previous_region.as_deref(), Some("Ctrl+Shift+R"));
+        assert_ne!(s.shortcuts.copy_last_path.as_deref(), Some("Ctrl+Shift+P"));
+    }
+
+    #[test]
+    fn the_upgrade_leaves_a_binding_the_user_picked_alone() {
+        // Only bindings still sitting on an old default are moved.
+        let s = migrated(r#"{"schemaVersion": 3, "shortcuts": {
+            "region": "Ctrl+Alt+G",
+            "fullscreen": "Ctrl+Shift+F"
+        }}"#);
+        assert_eq!(s.shortcuts.region.as_deref(), Some("Ctrl+Alt+G"));
+        assert_eq!(s.shortcuts.fullscreen.as_deref(), Some("Ctrl+PrintScreen"));
+    }
+
+    #[test]
+    fn no_default_binding_is_a_ctrl_shift_letter() {
+        // The whole point of the move: every Ctrl+Shift+letter is already
+        // something in an editor or a browser.
+        let d = Shortcuts::default();
+        for raw in [d.region, d.fullscreen, d.active_window, d.previous_region,
+                    d.copy_last_path, d.open_folder, d.open_settings]
+            .into_iter()
+            .flatten()
+        {
+            let is_ctrl_shift_letter = raw.starts_with("Ctrl+Shift+")
+                && raw.trim_start_matches("Ctrl+Shift+").len() == 1;
+            assert!(!is_ctrl_shift_letter, "{raw} is a Ctrl+Shift+letter again");
+        }
     }
 
     #[test]

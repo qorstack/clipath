@@ -53,6 +53,7 @@ const KEY_LABELS: Record<string, string> = {
   Minus: "-",
   Equal: "=",
   Backquote: "`",
+  PrintScreen: "PrtSc",
 };
 
 /** Render W3C key codes the way a user reads them: "Comma" -> ",". */

@@ -23,6 +23,7 @@ fn humanize(shortcut: &str) -> String {
             "Minus" => "-",
             "Equal" => "=",
             "Backquote" => "`",
+            "PrintScreen" => "PrtSc",
             "Space" => "Space",
             other => other,
         })

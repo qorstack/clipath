@@ -8,7 +8,7 @@ file path can be **copied to the clipboard instantly** — ready to paste into
 Claude Code, Codex CLI, terminals, IDEs, and issue trackers.
 
 ```
-Ctrl + Shift + A  →  drag region  →  (annotate)  →  Enter
+Print Screen     →  drag region  →  (annotate)  →  Enter
                                         ↓
         image saved + absolute path in clipboard → Ctrl + V
 ```
