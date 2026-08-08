@@ -18,8 +18,11 @@
   --ok: #34d399;
   --radius: 14px;
   --max: 1120px;
-  --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
-    "Noto Sans Thai", sans-serif;
+  /* Inter carries no Thai, so Noto Sans Thai has to sit directly behind it:
+     the browser falls through per character, and anything further down the
+     list would only be reached if both were missing. */
+  --font: "Inter", "Noto Sans Thai", "Segoe UI Variable Text", "Segoe UI",
+    system-ui, -apple-system, sans-serif;
   --mono: "JetBrains Mono", "Cascadia Code", ui-monospace, "SF Mono", Menlo, monospace;
 }
 

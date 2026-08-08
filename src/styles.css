@@ -37,9 +37,30 @@ body,
   margin: 0;
 }
 
+/* Bundled, not fetched: the app has no network at all, so naming Inter without
+   shipping it just meant silently falling back to Segoe UI everywhere. One
+   variable file covers every weight. Both are SIL Open Font License 1.1. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/inter-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans Thai";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/noto-sans-thai-thai.woff2") format("woff2");
+}
+
 body {
+  /* Inter carries no Thai, and file paths routinely do. Noto Sans Thai sits
+     directly behind it so the browser falls through per character. */
   font-family:
     "Inter",
+    "Noto Sans Thai",
     "Segoe UI Variable Text",
     "Segoe UI",
     system-ui,
