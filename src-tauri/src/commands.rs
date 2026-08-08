@@ -81,7 +81,15 @@ pub enum CaptureMode {
 /// alive costs a few hundred megabytes; keeping them alive all day for a tool
 /// used in bursts is not a trade worth making, so they are released once the
 /// user has clearly moved on and rebuilt on the next capture.
-const IDLE_RELEASE: std::time::Duration = std::time::Duration::from_secs(180);
+/// Three minutes was too eager. Screenshots come in bursts with gaps of
+/// several minutes inside one piece of work, and every release costs the next
+/// capture ~2s to rebuild the WebViews — long enough that the shortcut reads
+/// as broken. Ten minutes keeps a working session warm while still handing the
+/// memory back once the user has genuinely moved on.
+const IDLE_RELEASE: std::time::Duration = std::time::Duration::from_secs(600);
+
+/// How long a just-started capture is trusted to still be on its way.
+const STARTUP_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub fn touch_activity(app: &AppHandle) {
     *app.state::<AppState>().last_activity.lock().unwrap() = std::time::Instant::now();
@@ -136,11 +144,20 @@ fn spawn_capture(app: AppHandle, mode: CaptureMode) {
     {
         let state = app.state::<AppState>();
         if state.capture_active.load(Ordering::SeqCst) {
-            // The flag is only trustworthy while a session and a visible
-            // overlay both exist. Anything else is left over from a capture
-            // that ended abnormally, and must not wedge the shortcut.
-            let live =
-                state.session.lock().unwrap().is_some() && overlay::any_visible(&app);
+            // A capture that only just started is genuinely in flight. After an
+            // idle release the overlays have to be rebuilt first, so for a
+            // second or two there is no visible overlay yet — and treating that
+            // as a wedged flag meant a second keypress tore down the capture
+            // that was about to appear and started over, which is precisely
+            // what makes the shortcut feel dead.
+            let starting = state
+                .capture_started
+                .lock()
+                .unwrap()
+                .map(|t| t.elapsed() < STARTUP_GRACE)
+                .unwrap_or(false);
+            let live = starting
+                || (state.session.lock().unwrap().is_some() && overlay::any_visible(&app));
             if live {
                 crate::dlog("capture already in progress, ignoring");
                 return;

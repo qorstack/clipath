@@ -46,6 +46,11 @@ pub fn ensure_overlays(app: &AppHandle, monitors: &[MonitorInfo]) -> Result<(), 
             .visible(false)
             .shadow(false)
             .focused(false)
+            // A WebView with no background colour set defaults to white, and
+            // this window covers an entire monitor. Any frame drawn before the
+            // frozen screenshot lands is then a full-screen white flash, so it
+            // is given the near-black the scrim would have shown anyway.
+            .background_color(tauri::window::Color(8, 8, 12, 255))
             .build()
             .map_err(|e| format!("cannot create capture overlay: {e}"))?;
         expand(&win, m)?;

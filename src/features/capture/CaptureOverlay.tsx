@@ -66,6 +66,12 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
         canvas.getContext("2d")?.drawImage(bitmapRef.current, 0, 0);
       }
       setPhase("idle");
+      // Deliberately not waiting for a paint here. The window is still hidden
+      // at this point, and requestAnimationFrame in a hidden window is
+      // throttled to a standstill — waiting on it delayed the overlay by ten
+      // seconds. The white flash it was meant to prevent is handled where it
+      // belongs: the window declares a background colour, so there is no white
+      // to show in the first place.
       await ipc.overlayReady(monitor);
     } finally {
       loading.current = false;
