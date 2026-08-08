@@ -37,7 +37,7 @@ Measured on a two-monitor setup (2560×1440 + 1920×1080):
 
 | | |
 |---|---|
-| Shortcut → selection visible | ~170 ms |
+| Shortcut → selection visible | ~200 ms |
 | Idle memory | ~28 MB, one process |
 | Idle CPU | 0% (no polling) |
 
@@ -46,6 +46,11 @@ after three idle minutes, so a burst of screenshots stays fast without a
 few hundred megabytes sitting behind a tray icon for the rest of the day.
 The first capture after a quiet spell pays ~600 ms to rebuild them.
 
+## Website
+
+`docs/` holds the Clipath landing page and usage guide — a static, dependency-free
+site in English and Thai, ready to serve from GitHub Pages.
+
 ## Development
 
 Prerequisites: Node 20+, pnpm, Rust (stable, MSVC).
@@ -53,6 +58,13 @@ Prerequisites: Node 20+, pnpm, Rust (stable, MSVC).
 ```sh
 pnpm install
 pnpm tauri dev
+```
+
+## Tests
+
+```sh
+pnpm test                 # frontend: geometry, crop, key handling, settings merge
+cd src-tauri && cargo test # Rust: settings migration, filenames, capture, shortcuts
 ```
 
 ## Building

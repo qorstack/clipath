@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clipath — Capture. Annotate. Paste the path.</title>
+    <meta
+      name="description"
+      content="A Windows screenshot tool for people who work in a terminal. Every capture is saved to a folder you choose and its absolute path is one keystroke from your prompt."
+    />
+    <meta property="og:title" content="Clipath — Capture. Annotate. Paste the path." />
+    <meta
+      property="og:description"
+      content="Screenshot, annotate, and paste the file path straight into Claude Code, Codex CLI, or any prompt that takes a file."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="assets/favicon.png" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Thai:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- ------------------------------------------------------------- nav -->
+    <nav class="nav" id="nav">
+      <div class="wrap">
+        <a class="brand" href="#top">
+          <img src="assets/clipath-logo.png" alt="" />
+          Clipath
+        </a>
+        <div class="nav-links">
+          <a href="#features" data-th="ฟีเจอร์">Features</a>
+          <a href="#how" data-th="วิธีใช้งาน">How it works</a>
+          <a href="#install" data-th="ติดตั้ง">Install</a>
+          <a href="#guide" data-th="คู่มือ">Guide</a>
+          <a href="#shortcuts" data-th="คีย์ลัด">Shortcuts</a>
+          <a href="#faq">FAQ</a>
+        </div>
+        <div class="nav-actions">
+          <div class="lang" role="group" aria-label="Language">
+            <button type="button" data-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-lang="th" aria-pressed="false">ไทย</button>
+          </div>
+          <a class="btn btn-primary btn-sm" href="#install" data-th="ดาวน์โหลด">Download</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ------------------------------------------------------------ hero -->
+    <header class="hero" id="top">
+      <div class="field" aria-hidden="true">
+        <div class="grid"></div>
+        <div class="bloom"></div>
+      </div>
+      <div class="wrap">
+        <span class="pill">
+          <span class="dot"></span>
+          <b>v1.0</b>
+          <span data-th="สำหรับ Windows 10 และ 11">for Windows 10 &amp; 11</span>
+        </span>
+
+        <h1>
+          <span data-th="ทุกภาพหน้าจอ">Every screenshot, one keystroke</span>
+          <span class="grad" data-th="ห่างจากพรอมต์แค่ปุ่มเดียว">from your prompt</span>
+        </h1>
+
+        <p class="lede" data-th="Clipath บันทึกทุกภาพลงโฟลเดอร์ที่คุณเลือกโดยอัตโนมัติ พร้อมคัดลอกพาธเต็มของไฟล์ได้ทันที — วางลงใน Claude Code, Codex CLI หรือเทอร์มินัลไหนก็ได้ ไม่ต้องเปิดหาไฟล์เอง">
+          Clipath saves every capture to a folder you choose and puts its absolute
+          path on the clipboard instantly — ready to paste into Claude Code, Codex
+          CLI, or any terminal. No hunting through Explorer for the file you just took.
+        </p>
+
+        <div class="cta">
+          <a class="btn btn-primary" href="#install">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            <span data-th="ดาวน์โหลดสำหรับ Windows">Download for Windows</span>
+          </a>
+          <a class="btn" href="#how" data-th="ดูวิธีใช้งาน">See how it works</a>
+        </div>
+        <p class="meta" data-th="ไฟล์ติดตั้ง ~2 MB · ติดตั้งเฉพาะผู้ใช้ ไม่ต้องใช้สิทธิ์ผู้ดูแล · ฟรีและโอเพนซอร์ส (MIT)">
+          ~2 MB installer · installs per-user, no admin rights · free and open source (MIT)
+        </p>
+
+        <!-- drawn editor mock-up -->
+        <div class="shot" aria-hidden="true">
+          <div class="titlebar">
+            <span class="tl-dots"><i></i><i></i><i></i></span>
+            Clipath
+          </div>
+          <div class="shot-body">
+            <div class="shot-head">
+              <b class="mono">clipath_2026-08-08_12-36-49.png</b>
+              2560 × 1440 · C:\Users\you\Pictures\Clipath
+            </div>
+            <div class="tools">
+              <i>↖</i><i>⌗</i><i class="on">↗</i><i>─</i><i>▭</i><i>◯</i><i>✎</i><i>T</i><i>◍</i><i>▦</i><i>①</i>
+            </div>
+            <div class="canvas"><div class="marquee"></div></div>
+            <div class="shot-actions">
+              <span class="chip primary">Copy Path</span>
+              <span class="chip">Copy Image</span>
+              <span class="chip">Save &amp; Close</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="term" aria-hidden="true">
+          <div><span class="prompt">$</span> claude</div>
+          <div>
+            <span class="prompt">&gt;</span>
+            <span class="typed" id="type"></span><span class="caret"></span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="rule"></div>
+
+    <!-- ------------------------------------------------------------- how -->
+    <section id="how">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow" data-th="สามขั้นตอน">Three steps</div>
+          <h2 data-th="กด ลาก วาง">Press, drag, paste</h2>
+          <p data-th="ไม่ต้องเปิดโฟลเดอร์ ไม่ต้องลากไฟล์ ไม่ต้องตั้งชื่อ — งานทั้งหมดจบใน 3 จังหวะ">
+            No folder to open, no file to drag, no name to invent. The whole loop is
+            three beats long.
+          </p>
+        </div>
+        <div class="steps">
+          <div class="step reveal">
+            <div class="n">1</div>
+            <h3 data-th="กดคีย์ลัด">Press the shortcut</h3>
+            <p data-th="กด <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>A</kbd> ที่ไหนก็ได้ หน้าจอจะหยุดนิ่งทันทีเพื่อให้เลือกพื้นที่ได้ตรงจุด">
+              <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>A</kbd> anywhere in Windows. The
+              screen freezes instantly so nothing moves while you aim.
+            </p>
+          </div>
+          <div class="step reveal">
+            <div class="n">2</div>
+            <h3 data-th="ลากเลือกพื้นที่">Drag the region</h3>
+            <p data-th="ลากเลือกพื้นที่ที่ต้องการ ปล่อยเมาส์แล้วภาพจะถูกบันทึกลงดิสก์ทันที และเปิดหน้าแก้ไขให้เขียนทับได้">
+              Release, and the capture is already on disk. The editor opens with it
+              loaded, ready to annotate — or ignore entirely.
+            </p>
+          </div>
+          <div class="step reveal">
+            <div class="n">3</div>
+            <h3 data-th="คัดลอกพาธ">Copy the path</h3>
+            <p data-th="กด <kbd>Ctrl</kbd> <kbd>C</kbd> เพื่อคัดลอกพาธเต็มของไฟล์ แล้ววางลงในพรอมต์ได้เลย โฟกัสจะกลับไปยังหน้าต่างเดิมให้อัตโนมัติ">
+              <kbd>Ctrl</kbd> <kbd>C</kbd> copies the absolute path and hands focus
+              back to whatever you were doing. Paste. Done.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- -------------------------------------------------------- features -->
+    <section id="features">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow" data-th="ความสามารถ">What it does</div>
+          <h2 data-th="เครื่องมือแคปหน้าจอครบชุด ที่ไม่หน่วงเครื่อง">
+            A full capture tool that stays out of the way
+          </h2>
+          <p data-th="ครบทั้งการแคป การเขียนทับ และการจัดการไฟล์ — โดยกินแรมตอนพักแค่ประมาณ 28 MB">
+            Everything you expect from a screenshot app, in a process that idles at
+            about 28 MB.
+          </p>
+        </div>
+
+        <div class="features">
+          <div class="card reveal">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg></div>
+            <h3 data-th="สี่โหมดการแคป">Four capture modes</h3>
+            <p data-th="เลือกพื้นที่, เต็มจอ, หน้าต่างที่ใช้งานอยู่ และแคปซ้ำพื้นที่เดิม ทุกโหมดมีคีย์ลัดของตัวเอง">
+              Region, full screen, active window, and repeat-the-last-region. Each one
+              has its own global shortcut.
+            </p>
+          </div>
+
+          <div class="card reveal">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg></div>
+            <h3 data-th="เครื่องมือเขียนทับ 12 แบบ">Twelve annotation tools</h3>
+            <p data-th="ลูกศร เส้น สี่เหลี่ยม วงกลม ปากกา ไฮไลต์ ข้อความ เบลอ พิกเซล และเลขลำดับ พร้อมยกเลิก/ทำซ้ำเต็มรูปแบบ">
+              Arrow, line, rectangle, ellipse, pen, highlighter, text, blur, pixelate
+              and step counters, with full undo and redo.
+            </p>
+          </div>
+
+          <div class="card reveal">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></div>
+            <h3 data-th="ครอปด้วยการดันขอบ">Crop by pushing edges</h3>
+            <p data-th="ลากขอบหรือมุมเข้ามาแทนการวาดกรอบใหม่ พร้อมอัตราส่วนสำเร็จรูป 1:1, 4:3, 3:2, 16:9 และ 9:16">
+              Drag the edges inward instead of redrawing a box, with 1:1, 4:3, 3:2,
+              16:9 and 9:16 presets when you need an exact shape.
+            </p>
+          </div>
+
+          <div class="card reveal">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
+            <h3 data-th="เบลอแบบไม่มีขอบขาว">Blur that hides things</h3>
+            <p data-th="ทั้งเบลอและพิกเซลคำนวณเลยขอบที่มองเห็นออกไป จึงไม่เกิดขอบขาวฟุ้งที่ทำให้ข้อมูลลับยังอ่านออก">
+              Blur and pixelate both sample past the visible edge, so there is no pale
+              halo leaking the thing you were trying to cover.
+            </p>
+          </div>
+
+          <div class="card reveal">
+            <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+            <h3 data-th="แถบภาพล่าสุด">Recent strip</h3>
+            <p data-th="ภาพก่อนหน้าเรียงอยู่ใต้แคนวาส กดลูกศรซ้าย/ขวาเพื่อสลับภาพ แล้วคัดลอกพาธของภาพไหนก็ได้โดยไม่ต้องเปิดโฟลเดอร์">
+              Earlier captures sit under the canvas. Arrow keys step through them, so
+              you can grab an older path without opening a folder.
+            </p>
+          </div>
+
+          <div class="card reveal">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+            <h3 data-th="รูปแบบพาธที่ปรับได้">Path formats</h3>
+            <p data-th="คัดลอกเป็นพาธธรรมดา, ใส่เครื่องหมายคำพูด, file:// URI, รูปแบบ Markdown, @mention หรือกำหนดเทมเพลตเอง">
+              Copy as a plain path, quoted, a <code>file://</code> URI, Markdown image,
+              <code>@mention</code>, or your own template.
+            </p>
+          </div>
+
+          <div class="card reveal">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+            <h3 data-th="เร็วจริง">Genuinely fast</h3>
+            <p data-th="จากกดคีย์ลัดถึงเห็นหน้าจอหยุดนิ่งราว 200 มิลลิวินาที เพราะหน้าต่างซ้อนถูกเตรียมไว้ล่วงหน้าและปล่อยคืนเมื่อไม่ใช้">
+              About 200 ms from keypress to a frozen screen you can drag on. The overlay is pre-warmed
+              while you are idle, then released so it costs nothing to keep around.
+            </p>
+          </div>
+
+          <div class="card reveal">
+            <div class="ico"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></div>
+            <h3 data-th="รองรับหลายจอ">Multi-monitor aware</h3>
+            <p data-th="วางหน้าต่างเลือกพื้นที่บนทุกจอพร้อมกัน รวมถึงจอที่มี DPI ต่างกัน แล้วแคปจากจอที่คุณลากจริง">
+              A selection overlay on every screen at once, including mixed-DPI setups,
+              and the capture comes from the monitor you actually dragged on.
+            </p>
+          </div>
+
+          <div class="card reveal">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+            <h3 data-th="อยู่ในถาดระบบเงียบๆ">Lives in the tray</h3>
+            <p data-th="ปิดหน้าต่างแล้วโปรแกรมยังทำงานอยู่ คีย์ลัดยังใช้ได้ ออกจากโปรแกรมจริงได้จากเมนูถาดระบบเท่านั้น">
+              Closing the window hides it; the shortcut keeps working. Quitting for
+              real is a deliberate choice in the tray menu.
+            </p>
+          </div>
+        </div>
+
+        <div class="stats reveal">
+          <div class="stat"><b>~200 ms</b><span data-th="กดจนหน้าจอหยุด">keypress to freeze</span></div>
+          <div class="stat"><b>28 MB</b><span data-th="แรมตอนพัก">idle memory</span></div>
+          <div class="stat"><b>~2 MB</b><span data-th="ขนาดตัวติดตั้ง">installer size</span></div>
+          <div class="stat"><b>107</b><span data-th="เทสต์อัตโนมัติ">automated tests</span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="rule"></div>
+
+    <!-- --------------------------------------------------------- install -->
+    <section id="install">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow" data-th="การติดตั้ง">Install</div>
+          <h2 data-th="ติดตั้งใช้เวลาไม่ถึงหนึ่งนาที">Up and running in under a minute</h2>
+        </div>
+
+        <div class="install">
+          <div class="reveal">
+            <ol class="olist">
+              <li>
+                <div>
+                  <h4 data-th="ดาวน์โหลดตัวติดตั้ง">Download the installer</h4>
+                  <p data-th="ไฟล์ชื่อ <code>Clipath_1.0.0_x64-setup.exe</code> ขนาดประมาณ 2 MB">
+                    Grab <code>Clipath_1.0.0_x64-setup.exe</code> — about 2 MB.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <h4 data-th="เปิดไฟล์แล้วกดถัดไป">Run it</h4>
+                  <p data-th="ติดตั้งลงโปรไฟล์ผู้ใช้ของคุณ จึงไม่ต้องขอสิทธิ์ผู้ดูแลระบบ และไม่แตะไฟล์ของผู้ใช้คนอื่น">
+                    It installs into your own user profile, so Windows never asks for
+                    administrator rights and nothing outside your account is touched.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <h4 data-th="ตั้งค่าครั้งแรก">Finish the welcome flow</h4>
+                  <p data-th="เลือกโฟลเดอร์ที่จะเก็บภาพ ตั้งคีย์ลัดหลัก และเลือกธีมกับสีเน้น ทั้งหมดแก้ไขภายหลังได้ในหน้า Settings">
+                    Pick the folder captures are saved to, set your capture shortcut,
+                    and choose a theme. All of it is changeable later in Settings.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <h4 data-th="เริ่มแคปได้เลย">Capture</h4>
+                  <p data-th="กด <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>A</kbd> ได้ทันที Clipath จะเริ่มทำงานพร้อม Windows และรออยู่ในถาดระบบ">
+                    Press <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>A</kbd>. Clipath starts
+                    with Windows and waits in the tray.
+                  </p>
+                </div>
+              </li>
+            </ol>
+
+            <div class="note" style="margin-top: 28px">
+              <b data-th="ถ้า Windows ขึ้นเตือน SmartScreen">If SmartScreen warns you</b>
+              <span data-th="ตัวติดตั้งยังไม่ได้เซ็นใบรับรองแบบเสียเงิน Windows จึงอาจขึ้นหน้าต่าง “Windows protected your PC” ให้กด <b>More info</b> แล้วเลือก <b>Run anyway</b> — เป็นเรื่องปกติของโปรแกรมที่ยังไม่ได้ซื้อใบรับรอง">
+                — the installer is not signed with a paid certificate, so Windows may
+                show “Windows protected your PC”. Click <b>More info</b>, then
+                <b>Run anyway</b>.
+              </span>
+            </div>
+          </div>
+
+          <aside class="dlcard reveal">
+            <h3 data-th="ดาวน์โหลด Clipath">Download Clipath</h3>
+            <div class="plat">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5l7.5-1v7H3v-6zM11.5 4.3L21 3v8.5h-9.5v-7.2zM3 12.5h7.5v7L3 18.5v-6zM11.5 12.5H21V21l-9.5-1.3v-7.2z"/></svg>
+              <span>Windows 10 / 11 · x64</span>
+              <span>NSIS</span>
+            </div>
+            <a class="btn btn-primary" href="https://github.com/SatangBudsai/clipath/releases/latest" data-th="ดาวน์โหลดเวอร์ชันล่าสุด">
+              Download latest
+            </a>
+            <p style="margin-top: 16px; font-size: 13.5px; color: var(--text-3)" data-th="ต้องการ WebView2 ซึ่งมีมาให้แล้วใน Windows 11 และ Windows 10 รุ่นใหม่ ถ้าเครื่องยังไม่มี ตัวติดตั้งจะดาวน์โหลดให้อัตโนมัติ">
+              Requires WebView2, which ships with Windows 11 and recent Windows 10. If
+              it is missing, the installer fetches it for you.
+            </p>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <div class="rule"></div>
+
+    <!-- ----------------------------------------------------------- guide -->
+    <section id="guide">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow" data-th="คู่มือการใช้งาน">Guide</div>
+          <h2 data-th="ใช้งานได้ทุกส่วน">Everything Clipath does</h2>
+          <p data-th="อ้างอิงฉบับเต็มของโหมดการแคป เครื่องมือในหน้าแก้ไข และการตั้งค่าทั้งหมด">
+            The full reference for capture modes, the editor, and every setting.
+          </p>
+        </div>
+
+        <div class="tabs reveal" role="tablist">
+          <button class="tab" role="tab" aria-selected="true" data-panel="p-capture" data-th="การแคป">Capturing</button>
+          <button class="tab" role="tab" aria-selected="false" data-panel="p-editor" data-th="หน้าแก้ไข">The editor</button>
+          <button class="tab" role="tab" aria-selected="false" data-panel="p-output" data-th="ไฟล์และพาธ">Files &amp; paths</button>
+          <button class="tab" role="tab" aria-selected="false" data-panel="p-settings" data-th="การตั้งค่า">Settings</button>
+        </div>
+
+        <div class="panel reveal" id="p-capture">
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th data-th="โหมด">Mode</th>
+                  <th data-th="คีย์ลัด">Shortcut</th>
+                  <th data-th="ทำอะไร">What it does</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td data-th="เลือกพื้นที่">Region</td>
+                  <td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>A</kbd></td>
+                  <td class="desc" data-th="หยุดภาพหน้าจอทุกจอ แล้วลากเลือกพื้นที่ กด <kbd>Esc</kbd> เพื่อยกเลิก">
+                    Freezes every screen and lets you drag a rectangle.
+                    <kbd>Esc</kbd> cancels without saving anything.
+                  </td>
+                </tr>
+                <tr>
+                  <td data-th="เต็มจอ">Full screen</td>
+                  <td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>F</kbd></td>
+                  <td class="desc" data-th="แคปทั้งจอที่เคอร์เซอร์อยู่ แล้วเปิดหน้าแก้ไขทันที">
+                    Captures the whole monitor the cursor is on and goes straight to
+                    the editor.
+                  </td>
+                </tr>
+                <tr>
+                  <td data-th="หน้าต่างที่ใช้งานอยู่">Active window</td>
+                  <td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>E</kbd></td>
+                  <td class="desc" data-th="แคปเฉพาะหน้าต่างที่กำลังโฟกัส ตัดขอบตามจอที่หน้าต่างนั้นอยู่">
+                    Captures the focused window, clipped to the monitor it sits on.
+                  </td>
+                </tr>
+                <tr>
+                  <td data-th="พื้นที่เดิม">Previous region</td>
+                  <td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>R</kbd></td>
+                  <td class="desc" data-th="แคปซ้ำพื้นที่เดิมที่เพิ่งเลือกไว้ เหมาะกับการถ่ายหน้าจอเดิมหลายรอบ">
+                    Repeats the last rectangle exactly — useful for shooting the same
+                    panel again and again.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note" style="margin-top: 20px" data-th="ขณะเลือกพื้นที่: กด <kbd>Shift</kbd> ค้างเพื่อบังคับให้เป็นสี่เหลี่ยมจัตุรัส และมีแว่นขยายช่วยเล็งระดับพิกเซล เปิด/ปิดได้ในหน้า Settings">
+            While selecting, hold <kbd>Shift</kbd> to constrain the region to a square.
+            A pixel-precision magnifier follows the cursor; you can turn it off in
+            Settings.
+          </div>
+        </div>
+
+        <div class="panel reveal" id="p-editor" hidden>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th data-th="เครื่องมือ">Tool</th>
+                  <th data-th="ปุ่ม">Key</th>
+                  <th data-th="รายละเอียด">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td data-th="เลือก/ย้าย">Select</td><td><kbd>V</kbd></td><td class="desc" data-th="คลิกเพื่อเลือกวัตถุ ลากเพื่อย้าย กด <kbd>Delete</kbd> เพื่อลบ">Click to select, drag to move, <kbd>Delete</kbd> to remove.</td></tr>
+                <tr><td data-th="ครอป">Crop</td><td><kbd>C</kbd></td><td class="desc" data-th="ลากขอบหรือมุมเข้ามา เลือกอัตราส่วนสำเร็จรูปได้">Drag the edges inward; pick a ratio preset if you need one.</td></tr>
+                <tr><td data-th="ลูกศร">Arrow</td><td><kbd>A</kbd></td><td class="desc" data-th="กด <kbd>Shift</kbd> ค้างเพื่อล็อกมุมทีละ 45°">Hold <kbd>Shift</kbd> to snap to 45° steps.</td></tr>
+                <tr><td data-th="เส้นตรง">Line</td><td><kbd>L</kbd></td><td class="desc" data-th="กด <kbd>Shift</kbd> ค้างเพื่อล็อกมุมทีละ 45°">Hold <kbd>Shift</kbd> to snap to 45° steps.</td></tr>
+                <tr><td data-th="สี่เหลี่ยม">Rectangle</td><td><kbd>R</kbd></td><td class="desc" data-th="กด <kbd>Shift</kbd> ค้างเพื่อให้เป็นสี่เหลี่ยมจัตุรัส">Hold <kbd>Shift</kbd> for a perfect square.</td></tr>
+                <tr><td data-th="วงรี">Ellipse</td><td><kbd>O</kbd></td><td class="desc" data-th="กด <kbd>Shift</kbd> ค้างเพื่อให้เป็นวงกลม">Hold <kbd>Shift</kbd> for a circle.</td></tr>
+                <tr><td data-th="ปากกา">Pen</td><td><kbd>P</kbd></td><td class="desc" data-th="วาดอิสระ มีการปรับเส้นให้ลื่นขึ้น กด <kbd>Shift</kbd> เพื่อลากเป็นเส้นตรง">Freehand with smoothing; <kbd>Shift</kbd> draws a straight stroke.</td></tr>
+                <tr><td data-th="ไฮไลต์">Highlighter</td><td><kbd>H</kbd></td><td class="desc" data-th="เส้นโปร่งแสง ปรับความทึบได้ในหน้า Settings">Translucent stroke; opacity is adjustable in Settings.</td></tr>
+                <tr><td data-th="ข้อความ">Text</td><td><kbd>T</kbd></td><td class="desc" data-th="คลิกที่ตำแหน่งแล้วพิมพ์ กล่องพิมพ์ขยายตามข้อความ ดับเบิลคลิกเพื่อกลับมาแก้">Click, then type. Double-click existing text to edit it again.</td></tr>
+                <tr><td data-th="เบลอ">Blur</td><td><kbd>B</kbd></td><td class="desc" data-th="ลากคลุมพื้นที่ที่ต้องการซ่อน ปรับความแรงได้">Drag over what should be hidden; strength is configurable.</td></tr>
+                <tr><td data-th="พิกเซล">Pixelate</td><td><kbd>X</kbd></td><td class="desc" data-th="เหมือนเบลอ แต่ให้ผลแบบโมเสก">Same idea, mosaic result.</td></tr>
+                <tr><td data-th="เลขลำดับ">Step counter</td><td><kbd>N</kbd></td><td class="desc" data-th="คลิกวางตัวเลข 1, 2, 3… นับต่อให้อัตโนมัติ">Click to drop 1, 2, 3… numbering itself as you go.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note" style="margin-top: 20px" data-th="คีย์ลัดทั้งหมดอิงจาก<b>ตำแหน่งปุ่มจริงบนแป้นพิมพ์</b> ไม่ใช่ตัวอักษรที่พิมพ์ออกมา จึงใช้งานได้ตามปกติแม้สลับเป็นแป้นภาษาไทย">
+            Every shortcut is bound to the <b>physical key position</b>, not the
+            character it produces — so they keep working with a Thai, Russian, or any
+            other non-Latin layout active.
+          </div>
+        </div>
+
+        <div class="panel reveal" id="p-output" hidden>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th data-th="หัวข้อ">Setting</th>
+                  <th data-th="ตัวเลือก">Options</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td data-th="โฟลเดอร์บันทึก">Save folder</td>
+                  <td class="desc" data-th="ค่าเริ่มต้นคือ <code>Pictures\Clipath</code> เลือกโฟลเดอร์อื่นได้ และ Clipath จะทดสอบเขียนไฟล์จริงก่อน จึงไม่เจอปัญหาโฟลเดอร์ที่ OneDrive ย้ายไปแล้วเขียนไม่ได้">
+                    Defaults to <code>Pictures\Clipath</code>. Any folder works, and
+                    Clipath write-tests it first, so a OneDrive-redirected Pictures
+                    folder can't silently swallow your captures.
+                  </td>
+                </tr>
+                <tr>
+                  <td data-th="รูปแบบชื่อไฟล์">Filename pattern</td>
+                  <td class="desc" data-th="ตัวแปรที่ใช้ได้: <code>{yyyy} {MM} {dd} {HH} {mm} {ss} {fff} {width} {height} {counter}</code> ค่าเริ่มต้นเรียงตามเวลาได้ถูกต้องเสมอ">
+                    <code>{yyyy} {MM} {dd} {HH} {mm} {ss} {fff} {width} {height}
+                    {counter}</code>. The default sorts chronologically by name.
+                  </td>
+                </tr>
+                <tr>
+                  <td data-th="รูปแบบไฟล์">Format</td>
+                  <td class="desc" data-th="PNG, JPEG (ปรับคุณภาพได้) หรือ WebP แบบไม่สูญเสียคุณภาพ">
+                    PNG, JPEG with a quality slider, or lossless WebP.
+                  </td>
+                </tr>
+                <tr>
+                  <td data-th="รูปแบบพาธที่คัดลอก">Path copy format</td>
+                  <td class="desc" data-th="พาธธรรมดา, ใส่เครื่องหมายคำพูด, <code>file://</code> URI, Markdown, <code>@mention</code> หรือเทมเพลตเองด้วยตัวแปร <code>{path} {filename} {folder} {width} {height} {date} {time}</code>">
+                    Plain, quoted, <code>file://</code> URI, Markdown, <code>@mention</code>,
+                    or a custom template using
+                    <code>{path} {filename} {folder} {width} {height} {date} {time}</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td data-th="การกระทำเมื่อกด Enter">Enter action</td>
+                  <td class="desc" data-th="เลือกได้ว่า <kbd>Enter</kbd> ในหน้าแก้ไขจะคัดลอกพาธ, คัดลอกรูป หรือบันทึกแล้วปิด">
+                    What <kbd>Enter</kbd> does in the editor: Copy Path, Copy Image, or
+                    Save &amp; Close.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note" style="margin-top: 20px" data-th="การคัดลอกจะไม่ปิดหน้าต่าง เพื่อให้คุณคัดลอกพาธของภาพอื่นต่อได้จากแถบภาพล่าสุด มีแต่ <b>Save &amp; Close</b> เท่านั้นที่ปิดหน้าต่าง">
+            Copying leaves the editor open so you can grab another path from the Recent
+            strip. Only <b>Save &amp; Close</b> puts the window away.
+          </div>
+        </div>
+
+        <div class="panel reveal" id="p-settings" hidden>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th data-th="หมวด">Page</th>
+                  <th data-th="ตั้งค่าอะไรได้">What you can change</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td data-th="ทั่วไป">General</td><td class="desc" data-th="เริ่มพร้อม Windows, ค้างไว้ในถาดระบบเมื่อปิดหน้าต่าง, การแจ้งเตือน, รีเซ็ตการตั้งค่าทั้งหมด">Start with Windows, keep running in the tray, notifications, and a full reset.</td></tr>
+                <tr><td data-th="การแคป">Capture</td><td class="desc" data-th="โหมดเริ่มต้น, หยุดภาพหน้าจอ, แสดงขนาดพื้นที่, แว่นขยาย, เส้นไกด์, จำพื้นที่เดิม">Default mode, screen freeze, dimension readout, magnifier, crosshair guides, remembering the previous region.</td></tr>
+                <tr><td data-th="การเขียนทับ">Annotations</td><td class="desc" data-th="เครื่องมือและสีเริ่มต้น, ความหนาเส้น, ความทึบไฮไลต์, ขนาดตัวอักษร, ความแรงเบลอ, ขนาดพิกเซล, ค่าเริ่มต้นของเลขลำดับ">Default tool and colour, stroke width, highlighter opacity, text size, blur strength, pixel size, counter start.</td></tr>
+                <tr><td data-th="ไฟล์ผลลัพธ์">Output</td><td class="desc" data-th="โฟลเดอร์, รูปแบบชื่อไฟล์, ชนิดไฟล์, คุณภาพ, การกระทำเมื่อกด Enter, รูปแบบพาธ">Folder, filename pattern, file format, quality, Enter action, path format.</td></tr>
+                <tr><td data-th="คีย์ลัด">Shortcuts</td><td class="desc" data-th="ตั้งคีย์ลัดใหม่ได้ทั้ง 7 รายการ พร้อมตรวจสอบว่าปุ่มนั้นถูกโปรแกรมอื่นจองไว้หรือยัง">Rebind all seven global actions, with a live check for combinations another app already owns.</td></tr>
+                <tr><td data-th="รูปลักษณ์">Appearance</td><td class="desc" data-th="ธีมสว่าง/มืด/ตามระบบ และสีเน้นให้เลือกหลายสี">Light, dark or system theme, plus a choice of accent colours.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="rule"></div>
+
+    <!-- ------------------------------------------------------- shortcuts -->
+    <section id="shortcuts">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow" data-th="คีย์ลัด">Shortcuts</div>
+          <h2 data-th="สรุปคีย์ลัดทั้งหมด">The whole keyboard, on one page</h2>
+          <p data-th="ทุกปุ่มด้านล่างเปลี่ยนได้ในหน้า Settings และอิงตำแหน่งปุ่มจริง ไม่ขึ้นกับภาษาแป้นพิมพ์">
+            Every global binding below can be changed in Settings, and all of them read
+            the physical key rather than the character your layout produces.
+          </p>
+        </div>
+
+        <div class="features" style="grid-template-columns: repeat(2, 1fr)">
+          <div class="card reveal">
+            <h3 style="margin-bottom: 16px" data-th="ทั้งระบบ (ใช้ได้ทุกที่)">Global — anywhere in Windows</h3>
+            <div class="tablewrap" style="border: 0; background: none">
+              <table style="min-width: 0">
+                <tbody>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>A</kbd></td><td class="desc" data-th="แคปพื้นที่">Capture region</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>F</kbd></td><td class="desc" data-th="แคปเต็มจอ">Capture full screen</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>E</kbd></td><td class="desc" data-th="แคปหน้าต่างที่ใช้งานอยู่">Capture active window</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>R</kbd></td><td class="desc" data-th="แคปพื้นที่เดิม">Capture previous region</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>P</kbd></td><td class="desc" data-th="คัดลอกพาธของภาพล่าสุด">Copy last screenshot path</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>O</kbd></td><td class="desc" data-th="เปิดโฟลเดอร์ที่เก็บภาพ">Open screenshots folder</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>,</kbd></td><td class="desc" data-th="เปิดหน้าตั้งค่า">Open Settings</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card reveal">
+            <h3 style="margin-bottom: 16px" data-th="ในหน้าแก้ไข">In the editor</h3>
+            <div class="tablewrap" style="border: 0; background: none">
+              <table style="min-width: 0">
+                <tbody>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>C</kbd></td><td class="desc" data-th="คัดลอกพาธไฟล์">Copy the file path</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>C</kbd></td><td class="desc" data-th="คัดลอกรูปภาพ">Copy the image itself</td></tr>
+                  <tr><td><kbd>Enter</kbd></td><td class="desc" data-th="ทำตามการกระทำเริ่มต้นที่ตั้งไว้">Run the default action</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> <kbd>Z</kbd> / <kbd>Ctrl</kbd> <kbd>Y</kbd></td><td class="desc" data-th="ยกเลิก / ทำซ้ำ">Undo / redo</td></tr>
+                  <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td class="desc" data-th="สลับไปภาพก่อนหน้า/ถัดไปในแถบล่าสุด">Previous / next capture in Recent</td></tr>
+                  <tr><td><kbd>Delete</kbd></td><td class="desc" data-th="ลบวัตถุที่เลือกอยู่">Delete the selected object</td></tr>
+                  <tr><td><kbd>Shift</kbd></td><td class="desc" data-th="บังคับสัดส่วน: มุม 45°, จัตุรัส, วงกลม, ล็อกแกนตอนลาก">Constrain: 45°, squares, circles, axis-locked drags</td></tr>
+                  <tr><td><kbd>Esc</kbd></td><td class="desc" data-th="ยกเลิกการเลือก หรือปิดหน้าแก้ไข">Deselect, or close the editor</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="rule"></div>
+
+    <!-- ------------------------------------------------------------- faq -->
+    <section id="faq">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow">FAQ</div>
+          <h2 data-th="คำถามที่พบบ่อย">Questions people actually ask</h2>
+        </div>
+        <div class="faq">
+          <details class="reveal">
+            <summary data-th="ปิดหน้าต่างแล้วโปรแกรมปิดไปด้วยไหม">Does closing the window quit Clipath?</summary>
+            <p data-th="ไม่ปิด — โปรแกรมจะซ่อนลงถาดระบบและคีย์ลัดยังใช้งานได้ตามปกติ ถ้าต้องการปิดจริง ให้คลิกขวาที่ไอคอนในถาดระบบแล้วเลือก <b>Quit Clipath</b> หรือถ้าอยากให้ปุ่มปิดหมายถึงปิดจริง ก็ปิดตัวเลือก “Keep Clipath running in system tray” ในหน้า Settings ได้">
+              No. It hides to the system tray and the capture shortcut keeps working.
+              To quit for real, right-click the tray icon and choose
+              <b>Quit Clipath</b>. If you would rather the close button really closed
+              it, turn off “Keep Clipath running in system tray” in Settings.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary data-th="ไฟล์ภาพถูกเก็บไว้ที่ไหน">Where do my screenshots go?</summary>
+            <p data-th="ค่าเริ่มต้นคือ <code>Pictures\Clipath</code> เปลี่ยนได้ในหน้า Settings → Output ทุกภาพถูกบันทึกลงดิสก์ทันทีที่ปล่อยเมาส์ ไม่ต้องกดบันทึกเอง">
+              <code>Pictures\Clipath</code> by default, changeable under Settings →
+              Output. Every capture is written to disk the moment you release the
+              mouse — there is no “save” step to forget.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary data-th="ใช้กับหลายจอที่ความละเอียดต่างกันได้ไหม">Does it handle multiple monitors with different scaling?</summary>
+            <p data-th="ได้ Clipath วางหน้าต่างเลือกพื้นที่ไว้บนทุกจอพร้อมกัน และแคปจากจอที่คุณลากจริง โดยใช้พิกเซลจริงของจอนั้น ภาพที่ได้จึงคมชัดแม้จอมีการปรับสเกลต่างกัน">
+              Yes. A selection overlay appears on every screen at once, and the capture
+              comes from the physical pixels of the monitor you dragged on, so a 150%
+              scaled display still produces a sharp, full-resolution image.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary data-th="ใช้แป้นพิมพ์ภาษาไทยแล้วคีย์ลัดจะเพี้ยนไหม">Do the shortcuts break with a Thai keyboard layout?</summary>
+            <p data-th="ไม่เพี้ยน คีย์ลัดทั้งหมดอ่านจาก<b>ตำแหน่งปุ่มจริง</b> ไม่ใช่ตัวอักษรที่พิมพ์ได้ ปุ่มเดิมจึงทำงานเหมือนเดิมไม่ว่าจะสลับภาษาอยู่หรือไม่">
+              No. Every binding reads the <b>physical key</b>, not the character the
+              layout produces, so the same key does the same thing whether you are
+              typing English or Thai.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary data-th="กินทรัพยากรเครื่องแค่ไหนตอนไม่ได้ใช้">How much does it cost to leave running?</summary>
+            <p data-th="ประมาณ 28 MB ตอนพัก เพราะหน้าต่างที่ใช้แสดงผลจะถูกปล่อยคืนเมื่อไม่ได้ใช้งานสัก 3 นาที เหลือแค่ส่วนที่คอยฟังคีย์ลัดกับไอคอนในถาดระบบ แล้วสร้างใหม่ให้อัตโนมัติเมื่อกดแคปครั้งต่อไป">
+              About 28 MB. After three idle minutes the rendering layer is torn down
+              entirely, leaving only the shortcut listener and the tray icon; it is
+              rebuilt the next time you capture.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary data-th="ถอนการติดตั้งอย่างไร">How do I uninstall it?</summary>
+            <p data-th="ผ่าน Settings → Apps → Installed apps ของ Windows ตามปกติ ภาพที่แคปไว้จะไม่ถูกลบ เพราะเก็บอยู่ในโฟลเดอร์ของคุณเอง">
+              Through Windows Settings → Apps → Installed apps, like anything else.
+              Your captures are left alone — they live in your own folder, not inside
+              the app.
+            </p>
+          </details>
+          <details class="reveal">
+            <summary data-th="มีเวอร์ชัน macOS ไหม">Is there a macOS build?</summary>
+            <p data-th="ยังไม่มีไฟล์สำเร็จรูปให้ดาวน์โหลด โค้ดฝั่ง Rust ส่วนใหญ่ข้ามแพลตฟอร์มอยู่แล้วและมีการตั้งค่า DMG เตรียมไว้ แต่ส่วนที่เรียก Win32 โดยตรง เช่น การหาหน้าต่างที่โฟกัสอยู่ ยังต้องเขียนเพิ่มสำหรับ macOS">
+              Not a downloadable one yet. Most of the Rust side is already
+              cross-platform and the DMG packaging is configured, but the parts that
+              call Win32 directly — finding the focused window, restoring focus — still
+              need macOS equivalents.
+            </p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="wrap">
+        <span>© 2026 Clipath · MIT</span>
+        <div class="links">
+          <a href="https://github.com/SatangBudsai/clipath">GitHub</a>
+          <a href="#install" data-th="ดาวน์โหลด">Download</a>
+          <a href="#guide" data-th="คู่มือ">Guide</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
