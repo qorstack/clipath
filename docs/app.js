@@ -118,7 +118,7 @@
     // the SVG's own coordinates. transient: cleared when the step ends, which
     // is what makes the capture scrim lift once the region is taken.
     const STEPS = [
-      { ink: "ink-capture", from: [150, 45], at: [520, 250], transient: true, hold: 2600,
+      { ink: "ink-capture", from: [136, 65], at: [504, 234], transient: true, zoom: true, hold: 2800,
         en: ["Capture", "Drag the region — it is on disk the moment you let go"],
         th: ["แคปหน้าจอ", "ลากเลือกพื้นที่ ปล่อยเมาส์ปุ๊บไฟล์ถูกบันทึกทันที"] },
       { tool: "highlighter", ink: "ink-highlighter", at: [386, 133],
@@ -204,6 +204,7 @@
     }
 
     function reset() {
+      svg.classList.add("pre");
       for (const ink of inks) ink.classList.remove("in");
       for (const b of buttons.values()) b.classList.remove("on");
       copyChip.classList.remove("pressed");
@@ -234,6 +235,9 @@
 
         after(s.hold ?? 2200, () => {
           if (s.transient) inks[i].classList.remove("in");
+          // Dropping `pre` scales the captured region up to fill the frame —
+          // the moment the screen stops being a screen and becomes the image.
+          if (s.zoom) svg.classList.remove("pre");
           step(i + 1);
         });
         return;
@@ -271,6 +275,11 @@
       for (const ink of inks) {
         if (ink.id !== "ink-crop" && ink.id !== "ink-capture") ink.classList.add("in");
       }
+      svg.classList.remove("pre");
+      // The end state includes having copied the path, so show that too rather
+      // than a half-finished result.
+      copyChip.classList.add("pressed");
+      toast.classList.add("on");
       caption(FINALE);
       cursor.style.display = "none";
     } else {

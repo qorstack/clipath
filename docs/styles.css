@@ -581,6 +581,16 @@ kbd,
   transition: opacity 0.4s ease;
 }
 
+/* The run opens on the whole screen, small, with the selection drawn over it;
+   taking the region zooms that selection up to become the image being edited.
+   `pre` is the before state, and the script drops it once the region is taken. */
+.d-shot {
+  transition: transform 0.75s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.demo.pre .d-shot {
+  transform: translate(121.6px, 56.8px) scale(0.62);
+}
+
 .demo-caption {
   margin-top: 14px;
   text-align: center;
@@ -599,8 +609,16 @@ kbd,
   gap: 10px;
   justify-content: center;
   align-items: center;
-  margin-top: 14px;
+  /* Room above the buttons for the toast, which would otherwise land on the
+     caption line. */
+  margin-top: 44px;
   position: relative;
+}
+/* The toast belongs to the Copy Path button, so it hangs off the button rather
+   than off the centre of the row — where it sat above Copy Image instead. */
+.chip-anchor {
+  position: relative;
+  display: inline-flex;
 }
 .chip.pressed {
   transform: scale(0.94);
@@ -611,10 +629,10 @@ kbd,
 }
 .demo-toast {
   position: absolute;
-  /* Clear of the caption line: at -34px it landed straight on top of it. */
-  top: -76px;
+  bottom: calc(100% + 9px);
   left: 50%;
   transform: translate(-50%, 6px);
+  white-space: nowrap;
   padding: 6px 14px;
   border-radius: 8px;
   background: var(--ok);

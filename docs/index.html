@@ -99,7 +99,7 @@
           <div class="shot-body">
             <div class="shot-head">
               <b class="mono">clipath_2026-08-08_12-36-49.png</b>
-              2560 × 1440 · C:\Users\you\Pictures\Clipath
+              1472 × 680 · C:\Users\you\Pictures\Clipath
             </div>
             <div class="tools" id="demo-tools">
               <i data-tool="select"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg></i>
@@ -117,7 +117,7 @@
             </div>
 
             <div class="canvas">
-              <svg class="demo" id="demo" viewBox="0 0 640 300">
+              <svg class="demo pre" id="demo" viewBox="0 0 640 300">
                 <defs>
                   <linearGradient id="d-bg" x1="0" y1="0" x2="1" y2="1">
                     <stop offset="0" stop-color="#17203b" />
@@ -180,10 +180,10 @@
 
                 <!-- annotations, drawn one tool at a time -->
                 <g id="ink-capture" class="ink">
-                  <path d="M0 0h640v300H0z M150 45h370v205h-370z" fill="rgba(5,6,11,.62)" fill-rule="evenodd" />
-                  <rect x="150" y="45" width="370" height="205" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="5 4" />
-                  <rect x="150" y="253" width="68" height="15" rx="3" fill="#6e6bff" />
-                  <text class="d-dims" x="184" y="264">1194 × 505</text>
+                  <path d="M0 0h640v300H0z M136 65h368v169h-368z" fill="rgba(5,6,11,.66)" fill-rule="evenodd" />
+                  <rect x="136" y="65" width="368" height="169" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="5 4" />
+                  <rect x="136" y="237" width="70" height="15" rx="3" fill="#6e6bff" />
+                  <text class="d-dims" x="171" y="248">1472 × 680</text>
                 </g>
                 <g id="ink-highlighter" class="ink">
                   <rect x="168" y="126" width="218" height="14" rx="2" fill="#ffd60a" opacity=".34" />
@@ -223,10 +223,12 @@
             </div>
 
             <div class="shot-actions">
-              <span class="chip primary" id="demo-copy">Copy Path</span>
+              <span class="chip-anchor">
+                <span class="chip primary" id="demo-copy">Copy Path</span>
+                <span class="demo-toast" id="demo-toast">Path copied</span>
+              </span>
               <span class="chip">Copy Image</span>
               <span class="chip">Save &amp; Close</span>
-              <span class="demo-toast" id="demo-toast">Path copied</span>
             </div>
           </div>
         </div>
