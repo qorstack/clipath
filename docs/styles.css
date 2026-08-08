@@ -315,6 +315,7 @@ kbd,
    any width and never leaks whatever happened to be on a real desktop. */
 
 .shot {
+  position: relative;
   margin: 62px auto 0;
   max-width: 940px;
   border: 1px solid var(--border);
@@ -375,59 +376,258 @@ kbd,
   display: grid;
   place-items: center;
   font-style: normal;
-  font-size: 13px;
   color: var(--text-2);
+  transition: background 0.25s, color 0.25s, transform 0.25s;
+}
+.tools i svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .tools i.on {
   background: var(--accent);
   color: #fff;
+  transform: translateY(-2px);
 }
 .canvas {
   position: relative;
-  height: 260px;
+  /* Matches the demo's viewBox, so the whole mock-up fits with nothing
+     cropped and no letterboxing at any width. */
+  aspect-ratio: 640 / 300;
   border-radius: 12px;
-  background: radial-gradient(ellipse at 30% 20%, #1b2440, #0b0b12 70%);
   border: 1px solid var(--border);
   overflow: hidden;
 }
-/* The marquee traces the selection, echoing the app's own capture overlay. */
-.marquee {
-  position: absolute;
-  left: 16%;
-  top: 20%;
-  width: 46%;
-  height: 52%;
-  border: 2px dashed var(--accent);
-  border-radius: 6px;
-  background: rgba(110, 107, 255, 0.08);
-  animation: breathe 5s ease-in-out infinite;
+
+/* ---- the running demo ---------------------------------------------------- */
+
+.demo {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
-.marquee::after {
-  content: "820 × 410";
+/* The mocked screenshot: an editor, syntax-coloured, so it reads as a real
+   screen rather than a wireframe. */
+.d-code {
+  font-family: var(--mono);
+  font-size: 9px;
+}
+.d-ln {
+  font-family: var(--mono);
+  font-size: 8px;
+  fill: rgba(255, 255, 255, 0.24);
+  text-anchor: end;
+}
+.d-side {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  fill: rgba(255, 255, 255, 0.44);
+}
+.d-term {
+  font-family: var(--mono);
+  font-size: 8.5px;
+}
+.c-kw {
+  fill: #c792ea;
+}
+.c-str {
+  fill: #a5e07a;
+}
+.c-fn {
+  fill: #82aaff;
+}
+.c-var {
+  fill: #f0d9a0;
+}
+.c-pl {
+  fill: #b9c4dd;
+}
+.d-note {
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 600;
+  fill: #ff453a;
+}
+.d-badge circle {
+  fill: #ff453a;
+}
+.d-badge text {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  fill: #fff;
+  text-anchor: middle;
+}
+.d-handle circle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* Every annotation starts hidden and is revealed as its tool comes up. The
+   ones already drawn stay on screen, so the canvas fills the way a real
+   editing session does. */
+.ink {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.ink.in {
+  opacity: 1;
+}
+/* Strokes draw themselves; pathLength="1" makes the dash maths independent of
+   the actual path length. */
+#ink-arrow path,
+#ink-rect path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 0.55s ease-out;
+}
+#ink-arrow.in path,
+#ink-rect.in path {
+  stroke-dashoffset: 0;
+}
+/* transform-box defaults to view-box for SVG, so these origins are plain
+   user units from the viewBox corner. */
+#ink-highlighter rect {
+  transform: scaleX(0);
+  transform-origin: 168px 133px;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+#ink-highlighter.in rect {
+  transform: scaleX(1);
+}
+#ink-text text {
+  transform: translateY(6px);
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+#ink-text.in text {
+  transform: translateY(0);
+}
+#ink-blur g {
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+#ink-blur.in g {
+  opacity: 1;
+}
+#ink-counter .d-badge {
+  transform: scale(0);
+  transition: transform 0.32s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+#ink-counter .d-badge:nth-child(1) {
+  transform-origin: 150px 87px;
+}
+#ink-counter .d-badge:nth-child(2) {
+  transform-origin: 150px 132px;
+  transition-delay: 0.16s;
+}
+#ink-counter .d-badge:nth-child(3) {
+  transform-origin: 150px 218px;
+  transition-delay: 0.32s;
+}
+#ink-counter.in .d-badge {
+  transform: scale(1);
+}
+#ink-crop rect,
+#ink-crop path,
+#ink-crop .d-handle {
+  transform: scale(1.1);
+  transform-origin: 320px 150px;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+#ink-crop.in rect,
+#ink-crop.in path,
+#ink-crop.in .d-handle {
+  transform: scale(1);
+}
+
+/* The pointer sits over the whole mock-up rather than inside the canvas SVG,
+   because the run ends on the Copy Path button — which is outside it. */
+.d-cursor {
   position: absolute;
   left: 0;
-  top: -28px;
-  padding: 2px 8px;
+  top: 0;
+  width: 19px;
+  height: 19px;
+  z-index: 5;
+  opacity: 0;
+  transform: translate(0, 0);
+  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+}
+.d-cursor.on {
+  opacity: 1;
+}
+.d-cursor svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.d-dims {
   font-family: var(--mono);
-  font-size: 11px;
-  background: var(--accent);
-  color: #fff;
-  border-radius: 5px;
+  font-size: 8.5px;
+  fill: #fff;
+  text-anchor: middle;
 }
-@keyframes breathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.02);
-  }
+/* The capture scrim only fades; the marquee is already at its final size and
+   the drag is carried by the pointer travelling corner to corner. */
+#ink-capture {
+  transition: opacity 0.4s ease;
 }
+
+.demo-caption {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-3);
+  min-height: 20px;
+}
+.demo-caption b {
+  color: var(--text);
+  font-weight: 560;
+  margin-right: 8px;
+}
+
 .shot-actions {
   display: flex;
   gap: 10px;
   justify-content: center;
-  margin-top: 16px;
+  align-items: center;
+  margin-top: 14px;
+  position: relative;
+}
+.chip.pressed {
+  transform: scale(0.94);
+  filter: brightness(1.15);
+}
+.chip {
+  transition: transform 0.15s, filter 0.15s;
+}
+.demo-toast {
+  position: absolute;
+  /* Clear of the caption line: at -34px it landed straight on top of it. */
+  top: -76px;
+  left: 50%;
+  transform: translate(-50%, 6px);
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: var(--ok);
+  color: #06281c;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none;
+}
+.demo-toast.on {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 .chip {
   padding: 8px 15px;

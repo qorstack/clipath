@@ -89,6 +89,9 @@
 
         <!-- drawn editor mock-up -->
         <div class="shot" aria-hidden="true">
+          <div class="d-cursor" id="demo-cursor">
+            <svg viewBox="0 0 24 24"><path d="M1 1l15 8.5-6.5 1.6L6 20z" fill="#fff" stroke="rgba(0,0,0,.55)" stroke-width="1.3" stroke-linejoin="round" /></svg>
+          </div>
           <div class="titlebar">
             <span class="tl-dots"><i></i><i></i><i></i></span>
             Clipath
@@ -98,14 +101,132 @@
               <b class="mono">clipath_2026-08-08_12-36-49.png</b>
               2560 × 1440 · C:\Users\you\Pictures\Clipath
             </div>
-            <div class="tools">
-              <i>↖</i><i>⌗</i><i class="on">↗</i><i>─</i><i>▭</i><i>◯</i><i>✎</i><i>T</i><i>◍</i><i>▦</i><i>①</i>
+            <div class="tools" id="demo-tools">
+              <i data-tool="select"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg></i>
+              <i data-tool="crop"><svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg></i>
+              <i data-tool="arrow"><svg viewBox="0 0 24 24"><path d="M6 18L18 6"/><path d="M9 6h9v9"/></svg></i>
+              <i data-tool="line"><svg viewBox="0 0 24 24"><path d="M5 19L19 5"/></svg></i>
+              <i data-tool="rect"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/></svg></i>
+              <i data-tool="ellipse"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg></i>
+              <i data-tool="pen"><svg viewBox="0 0 24 24"><path d="M3 21l4-1L20 7l-3-3L4 17z"/></svg></i>
+              <i data-tool="highlighter"><svg viewBox="0 0 24 24"><path d="M4 20h6"/><path d="M9 15l-3 3 2 2 3-3"/><path d="M11 13l6-6 3 3-6 6z"/></svg></i>
+              <i data-tool="text"><svg viewBox="0 0 24 24"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg></i>
+              <i data-tool="blur"><svg viewBox="0 0 24 24"><path d="M12 3s6 6 6 10a6 6 0 0 1-12 0c0-4 6-10 6-10z"/></svg></i>
+              <i data-tool="pixelate"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg></i>
+              <i data-tool="counter"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10.5 9.5L13 8v8"/></svg></i>
             </div>
-            <div class="canvas"><div class="marquee"></div></div>
+
+            <div class="canvas">
+              <svg class="demo" id="demo" viewBox="0 0 640 300">
+                <defs>
+                  <linearGradient id="d-bg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#17203b" />
+                    <stop offset="1" stop-color="#0a0d18" />
+                  </linearGradient>
+                  <filter id="d-blur"><feGaussianBlur stdDeviation="3.5" /></filter>
+                  <clipPath id="d-secret"><rect x="233" y="79" width="121" height="15" /></clipPath>
+                  <marker id="d-head" markerWidth="5" markerHeight="5" refX="3.4" refY="2.5" orient="auto">
+                    <path d="M0 0l5 2.5L0 5z" fill="#ff453a" stroke="none" />
+                  </marker>
+                </defs>
+
+                <!-- The frozen screen being annotated. Real code, real
+                     filenames, a real stack trace: placeholder bars read as a
+                     wireframe, and the point is to look like the thing you
+                     actually screenshot. -->
+                <rect width="640" height="300" fill="url(#d-bg)" />
+                <g class="d-shot">
+                  <rect x="24" y="14" width="592" height="272" rx="8" fill="#0d1220" stroke="rgba(255,255,255,.10)" />
+                  <path d="M24 22a8 8 0 0 1 8-8h576a8 8 0 0 1 8 8v16H24z" fill="#151b2c" />
+                  <circle cx="42" cy="26" r="3" fill="#3a4468" /><circle cx="53" cy="26" r="3" fill="#3a4468" /><circle cx="64" cy="26" r="3" fill="#3a4468" />
+                  <rect x="136" y="14" width="86" height="24" fill="#0d1220" />
+                  <text class="d-side" x="152" y="30" fill="#cbd4ee">api.ts</text>
+
+                  <!-- file tree -->
+                  <rect x="24" y="38" width="112" height="248" fill="#0a0e19" />
+                  <text class="d-side" x="36" y="56" fill="rgba(255,255,255,.32)">EXPLORER</text>
+                  <text class="d-side" x="36" y="76">▾ src</text>
+                  <rect x="28" y="82" width="104" height="14" rx="3" fill="rgba(110,107,255,.20)" />
+                  <text class="d-side" x="44" y="93" fill="#cbd4ee">api.ts</text>
+                  <text class="d-side" x="44" y="112">main.tsx</text>
+                  <text class="d-side" x="44" y="131">types.ts</text>
+                  <text class="d-side" x="36" y="152">package.json</text>
+                  <text class="d-side" x="36" y="171">tsconfig.json</text>
+
+                  <!-- editor -->
+                  <text class="d-ln" x="163" y="61">1</text>
+                  <text class="d-ln" x="163" y="76">2</text>
+                  <text class="d-ln" x="163" y="91">3</text>
+                  <text class="d-ln" x="163" y="106">4</text>
+                  <text class="d-ln" x="163" y="121">5</text>
+                  <text class="d-ln" x="163" y="136">6</text>
+                  <text class="d-ln" x="163" y="151">7</text>
+                  <text class="d-ln" x="163" y="166">8</text>
+
+                  <text class="d-code" x="170" y="61"><tspan class="c-kw">import</tspan><tspan class="c-pl"> { </tspan><tspan class="c-fn">readFile</tspan><tspan class="c-pl"> } </tspan><tspan class="c-kw">from</tspan><tspan class="c-str"> "node:fs/promises"</tspan><tspan class="c-pl">;</tspan></text>
+                  <text class="d-code" x="170" y="91"><tspan class="c-kw">const</tspan><tspan class="c-var"> KEY</tspan><tspan class="c-pl"> = </tspan><tspan class="c-str">"sk-live-4f9a2c8d31b7"</tspan><tspan class="c-pl">;</tspan></text>
+                  <text class="d-code" x="170" y="121"><tspan class="c-kw">export async function</tspan><tspan class="c-fn"> load</tspan><tspan class="c-pl">(</tspan><tspan class="c-var">path</tspan><tspan class="c-pl">) {</tspan></text>
+                  <text class="d-code" x="181" y="136"><tspan class="c-kw">const</tspan><tspan class="c-var"> raw</tspan><tspan class="c-pl"> = </tspan><tspan class="c-kw">await</tspan><tspan class="c-fn"> readFile</tspan><tspan class="c-pl">(</tspan><tspan class="c-var">path</tspan><tspan class="c-pl">.</tspan><tspan class="c-var">name</tspan><tspan class="c-pl">);</tspan></text>
+                  <text class="d-code" x="181" y="151"><tspan class="c-kw">return</tspan><tspan class="c-fn"> JSON</tspan><tspan class="c-pl">.</tspan><tspan class="c-fn">parse</tspan><tspan class="c-pl">(</tspan><tspan class="c-var">raw</tspan><tspan class="c-pl">);</tspan></text>
+                  <text class="d-code" x="170" y="166"><tspan class="c-pl">}</tspan></text>
+
+                  <!-- terminal -->
+                  <rect x="136" y="182" width="480" height="104" fill="#080c14" />
+                  <path d="M136 182h480" stroke="rgba(255,255,255,.10)" stroke-width="1" />
+                  <text class="d-term" x="170" y="202"><tspan fill="#5ee6a8">$</tspan><tspan fill="rgba(255,255,255,.62)"> pnpm dev</tspan></text>
+                  <text class="d-term" x="170" y="222" fill="#ff6b64">TypeError: cannot read 'name' of undefined</text>
+                  <text class="d-term" x="190" y="238" fill="rgba(255,255,255,.34)">at load (src/api.ts:6:34)</text>
+                </g>
+
+                <!-- annotations, drawn one tool at a time -->
+                <g id="ink-capture" class="ink">
+                  <path d="M0 0h640v300H0z M150 45h370v205h-370z" fill="rgba(5,6,11,.62)" fill-rule="evenodd" />
+                  <rect x="150" y="45" width="370" height="205" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="5 4" />
+                  <rect x="150" y="253" width="68" height="15" rx="3" fill="#6e6bff" />
+                  <text class="d-dims" x="184" y="264">1194 × 505</text>
+                </g>
+                <g id="ink-highlighter" class="ink">
+                  <rect x="168" y="126" width="218" height="14" rx="2" fill="#ffd60a" opacity=".34" />
+                </g>
+                <g id="ink-rect" class="ink">
+                  <path d="M164 209h234v20h-234z" fill="none" stroke="#ff453a" stroke-width="2.2" pathLength="1" />
+                </g>
+                <g id="ink-arrow" class="ink">
+                  <path d="M540 200L406 217" fill="none" stroke="#ff453a" stroke-width="2.2" stroke-linecap="round" marker-end="url(#d-head)" pathLength="1" />
+                </g>
+                <g id="ink-text" class="ink">
+                  <text class="d-note" x="482" y="188">fix this</text>
+                </g>
+                <g id="ink-blur" class="ink" clip-path="url(#d-secret)">
+                  <g filter="url(#d-blur)">
+                    <rect x="222" y="72" width="146" height="30" fill="#0d1220" />
+                    <text class="d-code" x="235" y="91"><tspan class="c-str">"sk-live-4f9a2c8d31b7"</tspan></text>
+                  </g>
+                </g>
+                <g id="ink-counter" class="ink">
+                  <g class="d-badge"><circle cx="150" cy="87" r="8" /><text x="150" y="90">1</text></g>
+                  <g class="d-badge"><circle cx="150" cy="132" r="8" /><text x="150" y="135">2</text></g>
+                  <g class="d-badge"><circle cx="150" cy="218" r="8" /><text x="150" y="221">3</text></g>
+                </g>
+                <g id="ink-crop" class="ink">
+                  <path d="M0 0h640v300H0z M120 32h420v230h-420z" fill="rgba(6,7,12,.66)" fill-rule="evenodd" />
+                  <rect x="120" y="32" width="420" height="230" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="6 5" />
+                  <g class="d-handle"><circle cx="120" cy="32" r="5" /><circle cx="540" cy="32" r="5" /><circle cx="120" cy="262" r="5" /><circle cx="540" cy="262" r="5" /></g>
+                </g>
+
+              </svg>
+            </div>
+
+            <div class="demo-caption">
+              <b id="demo-tool">Arrow</b>
+              <span id="demo-hint">Point at the thing that matters</span>
+            </div>
+
             <div class="shot-actions">
-              <span class="chip primary">Copy Path</span>
+              <span class="chip primary" id="demo-copy">Copy Path</span>
               <span class="chip">Copy Image</span>
               <span class="chip">Save &amp; Close</span>
+              <span class="demo-toast" id="demo-toast">Path copied</span>
             </div>
           </div>
         </div>
