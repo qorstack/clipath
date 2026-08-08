@@ -88,8 +88,11 @@ pub enum CaptureMode {
 /// memory back once the user has genuinely moved on.
 const IDLE_RELEASE: std::time::Duration = std::time::Duration::from_secs(600);
 
-/// How long a just-started capture is trusted to still be on its way.
-const STARTUP_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
+/// How long a capture that has not yet put an overlay on screen is trusted to
+/// still be on its way. Long enough to cover rebuilding the WebViews, short
+/// enough that a genuinely wedged capture is retried on the next keypress
+/// rather than swallowed.
+const STARTUP_GRACE: std::time::Duration = std::time::Duration::from_millis(1500);
 
 pub fn touch_activity(app: &AppHandle) {
     *app.state::<AppState>().last_activity.lock().unwrap() = std::time::Instant::now();
@@ -144,27 +147,28 @@ fn spawn_capture(app: AppHandle, mode: CaptureMode) {
     {
         let state = app.state::<AppState>();
         if state.capture_active.load(Ordering::SeqCst) {
-            // A capture that only just started is genuinely in flight. After an
-            // idle release the overlays have to be rebuilt first, so for a
-            // second or two there is no visible overlay yet — and treating that
-            // as a wedged flag meant a second keypress tore down the capture
-            // that was about to appear and started over, which is precisely
-            // what makes the shortcut feel dead.
+            // An overlay that has reported ready is a capture the user is
+            // actively working in — leave it alone. Otherwise it is only
+            // trustworthy for as long as a rebuild plausibly takes; past that
+            // the press is a retry of something that never appeared, and
+            // refusing it is what leaves the shortcut looking dead.
+            let shown = state.capture_shown.load(Ordering::SeqCst);
             let starting = state
                 .capture_started
                 .lock()
                 .unwrap()
                 .map(|t| t.elapsed() < STARTUP_GRACE)
                 .unwrap_or(false);
-            let live = starting
-                || (state.session.lock().unwrap().is_some() && overlay::any_visible(&app));
-            if live {
-                crate::dlog("capture already in progress, ignoring");
+            if shown || starting {
+                crate::dlog(&format!(
+                    "capture already in progress (shown={shown}), ignoring"
+                ));
                 return;
             }
-            crate::dlog("clearing stale capture state");
+            crate::dlog("previous capture never appeared, restarting");
             end_capture(&app);
         }
+        state.capture_shown.store(false, Ordering::SeqCst);
         state.capture_active.store(true, Ordering::SeqCst);
     }
     std::thread::spawn(move || {
@@ -181,6 +185,7 @@ fn end_capture(app: &AppHandle) {
     let state = app.state::<AppState>();
     *state.session.lock().unwrap() = None;
     overlay::hide_overlays(app);
+    state.capture_shown.store(false, Ordering::SeqCst);
     state.capture_active.store(false, Ordering::SeqCst);
 }
 
@@ -285,7 +290,9 @@ fn watch_for_overlay(app: &AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(1200));
         let state = app.state::<AppState>();
-        if !state.capture_active.load(Ordering::SeqCst) || overlay::any_visible(&app) {
+        if !state.capture_active.load(Ordering::SeqCst)
+            || state.capture_shown.load(Ordering::SeqCst)
+        {
             return;
         }
         let infos: Vec<capture::MonitorInfo> = match state.session.lock().unwrap().as_ref() {
@@ -319,6 +326,16 @@ fn write_region(
         img.width(),
         img.height(),
     );
+    if capture::is_uniform(&img) {
+        // Not refused: selecting an empty area is a perfectly ordinary thing to
+        // do. But "the capture came out blank" is otherwise unfalsifiable after
+        // the fact, so it is on the record.
+        let p = img.get_pixel(0, 0).0;
+        crate::dlog(&format!(
+            "captured region is a single colour rgba({},{},{},{}) at {}x{} from monitor {}",
+            p[0], p[1], p[2], p[3], img.width(), img.height(), r.monitor
+        ));
+    }
     capture::encode_and_write(&img, &path, &snapshot.output.format, snapshot.output.quality)?;
     crate::history::record(app, &path);
     let state = app.state::<AppState>();
@@ -571,6 +588,16 @@ pub fn get_overlay_frame(app: AppHandle, monitor: usize) -> Result<tauri::ipc::R
     Ok(tauri::ipc::Response::new(shot.image.as_raw().clone()))
 }
 
+/// An overlay could not prepare itself. Without this the capture stays flagged
+/// active with nothing on screen, and the next keypress has to wait out the
+/// grace period before anything happens.
+#[tauri::command]
+pub fn overlay_failed(app: AppHandle, monitor: usize, reason: String) {
+    crate::dlog(&format!("overlay {monitor} failed: {reason}"));
+    end_capture(&app);
+    notify_error(&app, "Capture failed", &reason);
+}
+
 #[tauri::command]
 pub fn overlay_ready(app: AppHandle, monitor: usize) -> Result<(), String> {
     let win = app
@@ -590,6 +617,9 @@ pub fn overlay_ready(app: AppHandle, monitor: usize) -> Result<(), String> {
     win.show().map_err(|e| e.to_string())?;
     let _ = win.set_always_on_top(true);
 
+    app.state::<AppState>()
+        .capture_shown
+        .store(true, Ordering::SeqCst);
     if let Some(t) = *app.state::<AppState>().capture_started.lock().unwrap() {
         crate::dlog(&format!(
             "overlay {monitor} visible {}ms after shortcut",

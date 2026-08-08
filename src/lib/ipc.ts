@@ -20,6 +20,8 @@ export const ipc = {
   getOverlayFrame: (monitor: number) =>
     invoke<ArrayBuffer>("get_overlay_frame", { monitor }),
   overlayReady: (monitor: number) => invoke<void>("overlay_ready", { monitor }),
+  overlayFailed: (monitor: number, reason: string) =>
+    invoke<void>("overlay_failed", { monitor, reason }),
   commitRegion: (monitor: number, x: number, y: number, w: number, h: number) =>
     invoke<string>("commit_region", { monitor, x, y, w, h }),
   cancelCapture: () => invoke<void>("cancel_capture"),

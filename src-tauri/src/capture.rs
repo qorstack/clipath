@@ -161,6 +161,30 @@ pub fn encode_and_write(
     }
 }
 
+/// Whether every sampled pixel is the same colour.
+///
+/// A capture that comes out flat is either a genuinely empty area of the screen
+/// or a frame the compositor never filled in. The two are indistinguishable
+/// from the file afterwards, so the answer is recorded at the moment of capture
+/// instead of guessed at later.
+pub fn is_uniform(img: &RgbaImage) -> bool {
+    let (w, h) = img.dimensions();
+    if w == 0 || h == 0 {
+        return true;
+    }
+    let first = img.get_pixel(0, 0);
+    let step_x = (w / 16).max(1);
+    let step_y = (h / 16).max(1);
+    for y in (0..h).step_by(step_y as usize) {
+        for x in (0..w).step_by(step_x as usize) {
+            if img.get_pixel(x, y) != first {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 pub fn extension_for_format(format: &str) -> &'static str {
     match format {
         "jpeg" | "jpg" => "jpg",

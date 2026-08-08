@@ -96,17 +96,24 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
   }, []);
 
   useEffect(() => {
-    // A session may already be running when this window first mounts.
+    // A session may already be running when this window first mounts. No
+    // session yet is the ordinary case and not worth reporting; a failure once
+    // one exists has to be told to the backend, or the capture stays flagged
+    // active with nothing on screen.
     begin().catch(() => setPhase("waiting"));
     const started = listen<number>("capture-start", () => {
-      begin().catch((e) => console.error(e));
+      begin().catch((e) => {
+        console.error(e);
+        setPhase("waiting");
+        ipc.overlayFailed(monitor, String(e)).catch(() => {});
+      });
     });
     const ended = listen("capture-end", release);
     return () => {
       started.then((f) => f());
       ended.then((f) => f());
     };
-  }, [begin, release]);
+  }, [begin, release, monitor]);
 
   // Theme for the instruction pill / magnifier chrome
   useEffect(() => {

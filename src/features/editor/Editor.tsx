@@ -240,9 +240,15 @@ export function Editor({
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     const stage = stageRef.current;
     if (!stage) throw new Error("editor not ready");
+    // Without the image the stage renders an empty canvas, and exporting that
+    // writes a blank file straight over the capture it came from. Better to
+    // refuse than to destroy the screenshot.
+    if (!image) throw new Error("image is still loading");
     // Render back out at the image's native resolution.
-    return stage.toDataURL({ pixelRatio: 1 / displayScale, mimeType: "image/png" });
-  }, [displayScale]);
+    const url = stage.toDataURL({ pixelRatio: 1 / displayScale, mimeType: "image/png" });
+    if (!url || url.length < 128) throw new Error("could not render the image");
+    return url;
+  }, [displayScale, image]);
 
   const rememberPrefs = useCallback(async () => {
     const cfg = settings.annotations;

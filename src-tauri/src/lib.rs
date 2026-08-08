@@ -38,6 +38,10 @@ pub struct AppState {
     /// it back and the copied path can be pasted immediately.
     pub prev_focus: Mutex<isize>,
     pub capture_started: Mutex<Option<std::time::Instant>>,
+    /// Whether an overlay has reported itself ready for the *current* capture.
+    /// Window visibility is not a substitute: an overlay left on screen by an
+    /// earlier capture makes a wedged one look healthy.
+    pub capture_shown: std::sync::atomic::AtomicBool,
     /// Last time the user captured or used the editor, for the idle sweep.
     pub last_activity: Mutex<std::time::Instant>,
     /// Capture waiting to be shown, read by the main window as it mounts.
@@ -85,6 +89,7 @@ pub fn run() {
                 overlay_layout: Mutex::new(Vec::new()),
                 prev_focus: Mutex::new(0),
                 capture_started: Mutex::new(None),
+                capture_shown: std::sync::atomic::AtomicBool::new(false),
                 last_activity: Mutex::new(std::time::Instant::now()),
                 pending_editor: Mutex::new(None),
                 quitting: std::sync::atomic::AtomicBool::new(false),
@@ -160,6 +165,7 @@ pub fn run() {
             commands::get_overlay_info,
             commands::get_overlay_frame,
             commands::overlay_ready,
+            commands::overlay_failed,
             commands::commit_region,
             commands::cancel_capture,
             commands::take_pending_editor,
