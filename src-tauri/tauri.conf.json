@@ -50,7 +50,7 @@
       "nsis": {
         "installMode": "currentUser",
         "startMenuFolder": "Clipath",
-        "installerIcon": "icons/icon.ico",
+        "installerIcon": "installer/installer.ico",
         "headerImage": "installer/header.bmp",
         "sidebarImage": "installer/sidebar.bmp",
         "languages": ["English"],
