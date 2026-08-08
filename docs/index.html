@@ -165,9 +165,9 @@
           <h2 data-th="เครื่องมือแคปหน้าจอครบชุด ที่ไม่หน่วงเครื่อง">
             A full capture tool that stays out of the way
           </h2>
-          <p data-th="ครบทั้งการแคป การเขียนทับ และการจัดการไฟล์ — โดยกินแรมตอนพักแค่ประมาณ 28 MB">
+          <p data-th="ครบทั้งการแคป การเขียนทับ และการจัดการไฟล์ — โดยกินแรมตอนพักแค่ประมาณ 24 MB">
             Everything you expect from a screenshot app, in a process that idles at
-            about 28 MB.
+            about 24 MB.
           </p>
         </div>
 
@@ -230,8 +230,8 @@
             <div class="ico"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
             <h3 data-th="เร็วจริง">Genuinely fast</h3>
             <p data-th="จากกดคีย์ลัดถึงเห็นหน้าจอหยุดนิ่งราว 200 มิลลิวินาที เพราะหน้าต่างซ้อนถูกเตรียมไว้ล่วงหน้าและปล่อยคืนเมื่อไม่ใช้">
-              About 200 ms from keypress to a frozen screen you can drag on. The overlay is pre-warmed
-              while you are idle, then released so it costs nothing to keep around.
+              About 200 ms from keypress to a frozen screen you can drag on. The selection
+              overlay is built ahead of time and kept warm between captures.
             </p>
           </div>
 
@@ -256,7 +256,7 @@
 
         <div class="stats reveal">
           <div class="stat"><b>~200 ms</b><span data-th="กดจนหน้าจอหยุด">keypress to freeze</span></div>
-          <div class="stat"><b>28 MB</b><span data-th="แรมตอนพัก">idle memory</span></div>
+          <div class="stat"><b>24 MB</b><span data-th="แรมตอนพัก">idle memory</span></div>
           <div class="stat"><b>~2 MB</b><span data-th="ขนาดตัวติดตั้ง">installer size</span></div>
           <div class="stat"><b>107</b><span data-th="เทสต์อัตโนมัติ">automated tests</span></div>
         </div>
@@ -623,10 +623,11 @@
           </details>
           <details class="reveal">
             <summary data-th="กินทรัพยากรเครื่องแค่ไหนตอนไม่ได้ใช้">How much does it cost to leave running?</summary>
-            <p data-th="ประมาณ 28 MB ตอนพัก เพราะหน้าต่างที่ใช้แสดงผลจะถูกปล่อยคืนเมื่อไม่ได้ใช้งานสัก 3 นาที เหลือแค่ส่วนที่คอยฟังคีย์ลัดกับไอคอนในถาดระบบ แล้วสร้างใหม่ให้อัตโนมัติเมื่อกดแคปครั้งต่อไป">
-              About 28 MB. After three idle minutes the rendering layer is torn down
-              entirely, leaving only the shortcut listener and the tray icon; it is
-              rebuilt the next time you capture.
+            <p data-th="ประมาณ 24 MB ตอนพัก เพราะส่วนแสดงผลจะถูกปล่อยคืนทั้งหมดเมื่อไม่ได้ใช้งานครบ 3 นาที เหลือแค่ส่วนที่คอยฟังคีย์ลัดกับไอคอนในถาดระบบ ข้อแลกเปลี่ยนคือการแคปครั้งถัดไปต้องสร้างใหม่ ใช้เวลาราว 2 วินาที ส่วนครั้งต่อๆ ไปจะกลับมาเร็วราว 200 มิลลิวินาที">
+              About 24 MB. After three idle minutes the rendering layer is torn down
+              entirely, leaving only the shortcut listener and the tray icon. That is
+              a real trade: the next capture rebuilds it and takes around two seconds,
+              and every capture after that is back to ~200 ms.
             </p>
           </details>
           <details class="reveal">
