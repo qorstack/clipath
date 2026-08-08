@@ -35,6 +35,11 @@ pub fn ensure_overlays(app: &AppHandle, monitors: &[MonitorInfo]) -> Result<(), 
 
     for m in monitors {
         let label = label_for(m.index);
+        // Belt and braces: a leftover window under this label would fail the
+        // build below, and a failed rebuild is worse than a reused window.
+        if let Some(existing) = app.get_webview_window(&label) {
+            let _ = existing.destroy();
+        }
         let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
             .title("Clipath Capture")
             .decorations(false)
@@ -83,7 +88,11 @@ pub fn any_exist(app: &AppHandle) -> bool {
 pub fn close_overlays(app: &AppHandle) {
     for (label, win) in app.webview_windows() {
         if label.starts_with("overlay-") {
-            let _ = win.close();
+            // destroy, not close: close only *requests* a close, so the label
+            // is still taken when the caller immediately rebuilds — which made
+            // every attempted overlay rebuild fail with "already exists" and
+            // took the capture down with it.
+            let _ = win.destroy();
         }
     }
     if let Some(state) = app.try_state::<AppState>() {
