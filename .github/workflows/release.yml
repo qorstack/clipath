@@ -1,0 +1,74 @@
+# Builds the Windows installer and publishes it as a GitHub Release.
+#
+# Triggered by pushing a version tag, so the thing people download is built
+# from the tagged commit by CI rather than uploaded from whichever machine
+# happened to run the build.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      # A release that fails its own tests is not one worth publishing.
+      - run: pnpm test
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - run: pnpm tauri build
+
+      - name: Collect the installer
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe |
+                 Select-Object -First 1
+          if (-not $exe) { throw "no installer was produced" }
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          Copy-Item $exe.FullName release-assets/
+          # A name that does not carry the version, so the website can link
+          # straight at the file and keep working after the next release.
+          Copy-Item $exe.FullName release-assets/Clipath-Setup-x64.exe
+          Get-ChildItem release-assets | Format-Table Name, Length
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          draft: false
+          generate_release_notes: true
+          body: |
+            **Clipath — capture, annotate, paste the path.**
+
+            Download `Clipath-Setup-x64.exe` below and run it. It installs into
+            your own user profile, so Windows never asks for administrator
+            rights.
+
+            Windows may show "Windows protected your PC" because the installer
+            is not signed with a paid certificate — click **More info**, then
+            **Run anyway**.

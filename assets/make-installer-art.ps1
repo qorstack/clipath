@@ -289,6 +289,25 @@ if (Test-Path $docsAssets) {
   $og.Dispose()
 }
 
+# --- application icon ---------------------------------------------------------
+# The taskbar, the tray and Alt+Tab all draw this one, on backgrounds Clipath
+# does not control. The same tile as the installer keeps it legible on every
+# one of them, and keeps the app looking like the thing that installed it.
+$iconsDir = Join-Path $root "src-tauri\icons"
+Write-Ico (Join-Path $iconsDir "icon.ico") @(16, 24, 32, 48, 64, 128, 256)
+foreach ($size in @(32, 64, 128, 256, 512)) {
+  $tile = New-Tile $size
+  $name = switch ($size) {
+    32  { "32x32.png" }
+    64  { "64x64.png" }
+    128 { "128x128.png" }
+    256 { "128x128@2x.png" }
+    512 { "icon.png" }
+  }
+  $tile.Save((Join-Path $iconsDir $name), [System.Drawing.Imaging.ImageFormat]::Png)
+  $tile.Dispose()
+}
+
 $logo.Dispose()
 
-Write-Output "wrote header.bmp, sidebar.bmp, dmg-background.png and installer.ico to $outDir"
+Write-Output "wrote wizard art, installer.ico, site icons and the app icon"

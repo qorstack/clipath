@@ -13,7 +13,19 @@ function MainContent() {
   // Settings sits on top of the editor rather than replacing it, so the
   // capture being worked on is still there to come back to.
   const [showSettings, setShowSettings] = useState(false);
+  // Opened straight from the shortcut there is no capture sitting behind
+  // Settings, and without one there was no way back out of it at all. The most
+  // recent capture is the way back.
+  const [latest, setLatest] = useState<string | null>(null);
   useApplyTheme(settings);
+
+  useEffect(() => {
+    if (editorPath) return;
+    ipc
+      .listRecent(1)
+      .then((r) => setLatest(r[0]?.path ?? null))
+      .catch(() => setLatest(null));
+  }, [editorPath, showSettings, page]);
 
   useEffect(() => {
     // The window may have just been recreated for this capture, in which case
@@ -61,13 +73,16 @@ function MainContent() {
         onOpenSettings={() => setShowSettings(true)}
       />
     );
-  return (
-    <SettingsWindow
-      page={page}
-      setPage={setPage}
-      onBack={editorPath ? () => setShowSettings(false) : undefined}
-    />
-  );
+  const back = editorPath
+    ? () => setShowSettings(false)
+    : latest
+      ? () => {
+          setEditorPath(latest);
+          setShowSettings(false);
+        }
+      : undefined;
+
+  return <SettingsWindow page={page} setPage={setPage} onBack={back} />;
 }
 
 /** Shown while settings are loading, and if they could not be loaded at all. */
