@@ -13,6 +13,8 @@ import { deepMerge, type DeepPartial } from "./merge";
 
 interface SettingsCtx {
   settings: Settings | null;
+  /** Set once the settings could not be loaded at all, so the UI can say so. */
+  loadError: string | null;
   /** Deep-merge a partial patch, persist it, and return shortcut errors. */
   update: (patch: DeepPartial<Settings>) => Promise<string[]>;
   replace: (next: Settings) => Promise<string[]>;
@@ -20,19 +22,43 @@ interface SettingsCtx {
 
 const Ctx = createContext<SettingsCtx>({
   settings: null,
+  loadError: null,
   update: async () => [],
   replace: async () => [],
 });
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    ipc.getSettings().then(setSettings).catch(console.error);
+    let cancelled = false;
+
+    // One attempt with the failure swallowed left the window permanently
+    // blank: nothing rendered, nothing retried, nothing said. The window can
+    // be shown before the backend is ready to answer, so this retries.
+    (async () => {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          const loaded = await ipc.getSettings();
+          if (cancelled) return;
+          setSettings(loaded);
+          setLoadError(null);
+          return;
+        } catch (e) {
+          if (cancelled) return;
+          console.error("could not load settings", e);
+          if (attempt === 5) setLoadError(String(e));
+          else await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
+        }
+      }
+    })();
+
     const unlisten = listen<Settings>("settings-changed", (e) =>
       setSettings(e.payload),
     );
     return () => {
+      cancelled = true;
       unlisten.then((f) => f());
     };
   }, []);
@@ -56,8 +82,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ settings, update, replace }),
-    [settings, update, replace],
+    () => ({ settings, loadError, update, replace }),
+    [settings, loadError, update, replace],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -75,6 +101,11 @@ export function useApplyTheme(settings: Settings | null) {
         (theme === "system" &&
           window.matchMedia("(prefers-color-scheme: dark)").matches);
       document.documentElement.classList.toggle("dark", dark);
+      try {
+        localStorage.setItem("clipath-dark", dark ? "1" : "0");
+      } catch {
+        /* storage unavailable; only affects the next first paint */
+      }
       document.documentElement.style.setProperty(
         "--accent",
         settings.appearance.accent,

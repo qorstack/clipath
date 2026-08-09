@@ -5,6 +5,22 @@ import "./styles.css";
 
 const label = getCurrentWindow().label;
 const OVERLAY_PREFIX = "overlay-";
+
+// Apply the theme before React renders anything. Waiting for settings to load
+// means the first paint uses the light palette, so a window that is shown
+// before the app has rendered — or that never renders because the settings
+// call failed — is a sheet of white rather than the dark surface it should be.
+try {
+  const cached = localStorage.getItem("clipath-dark");
+  const dark =
+    cached === null
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+      : cached === "1";
+  document.documentElement.classList.toggle("dark", dark);
+} catch {
+  /* storage unavailable; the settings load will set it shortly */
+}
+
 const root = ReactDOM.createRoot(document.getElementById("root")!);
 
 // Loaded per window kind, not up front: the selection overlay has no use for

@@ -195,6 +195,10 @@ pub fn show_main(app: &AppHandle, page: &str) {
             .inner_size(780.0, 580.0)
             .min_inner_size(700.0, 520.0)
             .center()
+            // The idle sweep destroys this window, so it is rebuilt here more
+            // often than it is created from the config — and without a
+            // background colour a WebView shows white until it has painted.
+            .background_color(tauri::window::Color(28, 28, 30, 255))
             .build();
             match built {
                 Ok(w) => w,
