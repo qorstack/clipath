@@ -38,6 +38,18 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
   // construction. The reported factor disagreed with what the WebView actually
   // used and produced regions wider than the screen, which were then clamped —
   // so the saved image did not match the box that was drawn.
+  //
+  // Measured from the canvas rather than the window, and read again at the
+  // moment a selection is committed. The window is still settling into its
+  // monitor when this component first renders, and a scale worked out from a
+  // viewport 24px short of the screen quietly stretched the selection: a
+  // 640x400 box came back as 646x405 roughly one time in five.
+  const measureScale = useCallback(() => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!info || !rect?.width || !rect.height) return { x: 1, y: 1 };
+    return { x: info.width / rect.width, y: info.height / rect.height };
+  }, [info]);
+
   const scaleX = info && window.innerWidth ? info.width / window.innerWidth : 1;
   const scaleY = info && window.innerHeight ? info.height / window.innerHeight : 1;
 
@@ -175,13 +187,21 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
       setPhase("committing");
       const maxW = info?.width ?? Infinity;
       const maxH = info?.height ?? Infinity;
+      const scale = measureScale();
+      // What the page thought it was committing, so a region that comes out
+      // the wrong size can be blamed on the mapping or on the pointer, rather
+      // than argued about.
+      ipc.pageNote(
+        `selection ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.w)}x${Math.round(r.h)} css` +
+          ` at scale ${scale.x.toFixed(4)}x${scale.y.toFixed(4)}`,
+      ).catch(() => {});
       // Clamped here as well as in the backend: a region that runs past the
       // frame gets trimmed on the way in, and a trimmed region is exactly the
       // mismatch between the box drawn and the image saved.
-      const px = Math.min(Math.max(0, Math.round(r.x * scaleX)), Math.max(0, maxW - 1));
-      const py = Math.min(Math.max(0, Math.round(r.y * scaleY)), Math.max(0, maxH - 1));
-      const pw = Math.max(1, Math.min(Math.round(r.w * scaleX), maxW - px));
-      const ph = Math.max(1, Math.min(Math.round(r.h * scaleY), maxH - py));
+      const px = Math.min(Math.max(0, Math.round(r.x * scale.x)), Math.max(0, maxW - 1));
+      const py = Math.min(Math.max(0, Math.round(r.y * scale.y)), Math.max(0, maxH - 1));
+      const pw = Math.max(1, Math.min(Math.round(r.w * scale.x), maxW - px));
+      const ph = Math.max(1, Math.min(Math.round(r.h * scale.y), maxH - py));
       try {
         await ipc.commitRegion(monitor, px, py, pw, ph);
       } catch (e) {
@@ -189,7 +209,7 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
         setPhase("idle");
       }
     },
-    [monitor, scaleX, scaleY, info],
+    [monitor, measureScale, info],
   );
 
   const onUp = () => {

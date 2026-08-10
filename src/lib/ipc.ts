@@ -1,3 +1,4 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import type { FinalAction, OverlayData, RecentItem, Settings } from "../types";
 
@@ -5,6 +6,8 @@ export const ipc = {
   getSettings: () => invoke<Settings>("get_settings"),
   setSettings: (settings: Settings) =>
     invoke<string[]>("set_settings", { settings }),
+  pageNote: (note: string) =>
+    invoke<void>("page_note", { window: getCurrentWindow().label, note }),
   defaultShortcuts: () => invoke<Settings["shortcuts"]>("default_shortcuts"),
   validateFolder: (path: string) => invoke<void>("validate_folder", { path }),
   getDefaultFolder: () => invoke<string>("get_default_folder"),

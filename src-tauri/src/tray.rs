@@ -181,10 +181,12 @@ pub fn refresh(app: &AppHandle, settings: &Settings) {
     let _ = tray.set_tooltip(Some(format!("Clipath — {shortcut} to capture")));
 }
 
-/// The main window, created if the idle sweep destroyed it. Deliberately does
-/// not show it: a WebView that has just been created has nothing to paint, and
-/// a window put on screen at that moment is a rectangle of its background
-/// colour until the bundle loads.
+/// The main window, created if the idle sweep destroyed it.
+///
+/// Built visible and hidden a line later, which looks backwards and is not:
+/// asking the builder for a hidden window is one of the ways this build fails
+/// to return. It is also why the caller rebuilds this *before* the capture
+/// overlays — see the note in `start_capture`.
 pub fn ensure_main(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     match app.get_webview_window("main") {
         Some(w) => Some(w),
@@ -205,7 +207,13 @@ pub fn ensure_main(app: &AppHandle) -> Option<tauri::WebviewWindow> {
             .background_color(tauri::window::Color(28, 28, 30, 255))
             .build();
             match built {
-                Ok(w) => Some(w),
+                Ok(w) => {
+                    // Nothing to look at yet; callers put it on screen when
+                    // there is.
+                    let _ = w.hide();
+                    crate::dlog("main window rebuilt");
+                    Some(w)
+                }
                 Err(e) => {
                     crate::dlog(&format!("cannot recreate main window: {e}"));
                     None

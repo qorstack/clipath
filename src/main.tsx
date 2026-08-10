@@ -23,14 +23,14 @@ try {
   /* storage unavailable; the settings load will set it shortly */
 }
 
-// Say so as early as possible, and say so when the page breaks: a blank
-// overlay and a page that never loaded look identical from the outside.
-if (overlayMonitor !== null) {
-  const note = (n: string) =>
-    invoke("overlay_note", { monitor: overlayMonitor, note: n }).catch(() => {});
-  note("page is live");
-  window.addEventListener("error", (e) => note(`page error: ${e.message}`));
-}
+// Say so as early as possible, and say so when the page breaks: a window
+// showing nothing but its background colour and a page that never ran look
+// identical from the outside. Every window reports, not just the overlays —
+// the editor was the one that came up blank.
+const note = (n: string) =>
+  invoke("page_note", { window: label, note: n }).catch(() => {});
+note("page is live");
+window.addEventListener("error", (e) => note(`page error: ${e.message}`));
 
 const root = ReactDOM.createRoot(document.getElementById("root")!);
 

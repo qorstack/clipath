@@ -280,6 +280,18 @@ fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
         region: None,
         prev_focus,
     });
+    // Before the overlays, and that order is the whole point. Building a
+    // window under the label `main` after the overlays have just been rebuilt
+    // does not come back: it creates the window — the empty rectangle the app
+    // came up as — and then never returns, so the editor was never sized,
+    // never told which capture to open and never shown. Built first, as it is
+    // at startup, it works every time. Normally the window is already there
+    // and this costs nothing; it only builds after an idle release.
+    if app.get_webview_window("main").is_none() {
+        crate::dlog("cold: rebuilding the editor window before the overlays");
+        let _ = tray::ensure_main(app);
+    }
+
     // Same reasoning as the watchdog: building the overlay windows is
     // event-loop work, so it is posted rather than requested from this thread.
     // Normally there is nothing to build and the closure only sends the start
@@ -403,6 +415,16 @@ fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
     *app.state::<AppState>().pending_editor.lock().unwrap() =
         Some(path.to_string_lossy().to_string());
 
+    present_editor(app, path)
+}
+
+/// Put the editor on screen.
+///
+/// Deliberately called straight from the capture thread rather than posted to
+/// the event loop. Building a WebView needs the loop to keep pumping messages
+/// while it starts up, so a build asked for from *inside* a loop callback
+/// never returns — the editor then never appeared at all.
+fn present_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
     let existing = app.get_webview_window("main");
     let already_open = existing
         .as_ref()
@@ -410,6 +432,7 @@ fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
         .unwrap_or(false);
 
     if already_open {
+        crate::dlog("editor: reusing the window already on screen");
         let win = existing.expect("visible window exists");
         let _ = win.set_focus();
         if let Ok(hwnd) = win.hwnd() {
@@ -423,6 +446,7 @@ fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
     // brand-new WebView with nothing to paint, and showing it here is what put
     // an empty rectangle of background colour on screen. It goes up when the
     // editor reports that it has the capture rendered.
+    crate::dlog("editor: building a window for the capture");
     let win = tray::ensure_main(app).ok_or("main window unavailable")?;
 
     if let Ok((iw, ih)) = image::image_dimensions(path) {
@@ -442,17 +466,20 @@ fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
         let _ = win.center();
     }
     let _ = app.emit_to("main", "open-editor", path.to_string_lossy().to_string());
+    crate::dlog("editor: window ready and waiting for the page");
 
     // A frontend that never reports ready must not leave the capture with no
     // window at all, so the wait has a floor.
     let fallback = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(2500));
-        if let Some(w) = fallback.get_webview_window("main") {
-            if !w.is_visible().unwrap_or(false) {
+        match fallback.get_webview_window("main") {
+            Some(w) if !w.is_visible().unwrap_or(false) => {
                 crate::dlog("editor never reported ready, showing anyway");
                 present_main(&fallback);
             }
+            Some(_) => {}
+            None => crate::dlog("editor: the window is gone, nothing to show"),
         }
     });
     Ok(())
@@ -671,18 +698,19 @@ pub fn present_main(app: &AppHandle) {
 /// hidden rather than showing an unpainted WebView.
 #[tauri::command]
 pub fn editor_ready(app: AppHandle) {
+    crate::dlog("editor: reported the capture is rendered");
     present_main(&app);
 }
 
-/// The overlay page talking about itself — that it loaded, or that something
-/// went wrong on it. Purely a log entry: without it, a capture that never
-/// appears cannot be told apart from a page that was never loaded at all, and
-/// that distinction is the difference between a five-minute fix and a day of
-/// guessing. Deliberately does not touch the capture: a stray script error is
-/// not a reason to cancel a selection the user is in the middle of.
+/// A page talking about itself — that it loaded, or that something went wrong
+/// on it. Purely a log entry, and the one that matters most: a window that
+/// never appeared and a page that never ran look identical from the outside,
+/// and telling them apart is the difference between a five-minute fix and a
+/// day of guessing. Deliberately does not touch the capture: a stray script
+/// error is not a reason to cancel a selection the user is in the middle of.
 #[tauri::command]
-pub fn overlay_note(monitor: usize, note: String) {
-    crate::dlog(&format!("overlay {monitor}: {note}"));
+pub fn page_note(window: String, note: String) {
+    crate::dlog(&format!("{window}: {note}"));
 }
 
 /// An overlay could not prepare itself. Without this the capture stays flagged
