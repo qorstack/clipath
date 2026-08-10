@@ -220,7 +220,9 @@ impl Default for Appearance {
     fn default() -> Self {
         Self {
             theme: "system".into(),
-            accent: "#5E5CE6".into(),
+            // Onboarding used to offer a different accent to this one, and
+            // whichever it was holding won. They agree now, on the blue.
+            accent: "#0A84FF".into(),
         }
     }
 }

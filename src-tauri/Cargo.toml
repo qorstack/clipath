@@ -1,6 +1,6 @@
 [package]
 name = "clipath"
-version = "1.0.2"
+version = "1.0.3"
 description = "Capture. Annotate. Paste the path."
 authors = ["Clipath"]
 edition = "2021"

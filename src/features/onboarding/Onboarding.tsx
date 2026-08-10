@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ipc } from "../../lib/ipc";
 import { useSettings } from "../../lib/settings";
@@ -13,11 +13,23 @@ export function Onboarding() {
   const [folder, setFolder] = useState("");
   const [folderError, setFolderError] = useState<string | null>(null);
   const [folderValid, setFolderValid] = useState(false);
-  const [shortcut, setShortcut] = useState<string | null>("Ctrl+Shift+A");
+  const [shortcut, setShortcut] = useState<string | null>(null);
   const [launchAtStartup, setLaunchAtStartup] = useState(true);
   const [notifications, setNotifications] = useState(true);
   const [theme, setTheme] = useState<"system" | "light" | "dark">("system");
-  const [accent, setAccent] = useState("#0A84FF");
+  const [accent, setAccent] = useState("");
+
+  // Seeded from the real defaults rather than repeated here. Onboarding writes
+  // whatever it is holding when it finishes, so a copy of the default that
+  // drifts — as "Ctrl+Shift+A" did — silently overwrites the true one on every
+  // fresh install.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !settings) return;
+    seeded.current = true;
+    setShortcut(settings.shortcuts.region);
+    setAccent(settings.appearance.accent);
+  }, [settings]);
 
   // Preview the chosen appearance live, before anything is persisted.
   useEffect(() => {
@@ -76,7 +88,7 @@ export function Onboarding() {
     }
   };
 
-  if (!settings) return null;
+  if (!settings || !accent) return null;
 
   const steps = [
     // 0 — Welcome

@@ -224,7 +224,7 @@ $g.Dispose(); $s1.Dispose()
 
 $d1 = New-Canvas 660 420 "#060B16" "#132444" 45
 $g = $d1.Graphics
-Draw-Logo $g 296 26 68
+Draw-Installer-Mark $g 296 26 68
 $dmgTitle = New-Object System.Drawing.Font("Segoe UI Semibold", 15)
 $fmtC = New-Object System.Drawing.StringFormat
 $fmtC.Alignment = [System.Drawing.StringAlignment]::Center
