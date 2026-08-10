@@ -46,6 +46,11 @@ body {
   overflow-x: hidden;
 }
 
+img,
+svg {
+  max-width: 100%;
+}
+
 h1,
 h2,
 h3,
@@ -100,6 +105,11 @@ kbd,
   gap: 28px;
   height: 66px;
 }
+.nav .brand,
+.nav-actions,
+.nav-actions > * {
+  flex-shrink: 0;
+}
 .brand {
   display: flex;
   align-items: center;
@@ -126,6 +136,28 @@ kbd,
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* Link to the source, in the nav and the footer. */
+.gh-link {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+.gh-link:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+}
+.gh-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .lang {
@@ -346,6 +378,7 @@ kbd,
 }
 .shot-body {
   padding: 18px;
+  min-width: 0;
 }
 .shot-head {
   font-size: 13.5px;
@@ -356,6 +389,7 @@ kbd,
   color: var(--text);
   font-size: 15px;
   font-weight: 560;
+  overflow-wrap: anywhere;
 }
 .tools {
   display: flex;
@@ -679,6 +713,7 @@ kbd,
 }
 .term .typed {
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 .caret {
   display: inline-block;
@@ -765,6 +800,14 @@ section {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 18px;
+}
+.shortcut-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.features > *,
+.steps > *,
+.install > * {
+  min-width: 0;
 }
 .card {
   padding: 26px;
@@ -1095,11 +1138,21 @@ footer a:hover {
   .nav-links {
     display: none;
   }
+  .nav .wrap {
+    gap: 18px;
+  }
+  .nav .brand {
+    margin-right: auto;
+  }
 }
 
 @media (max-width: 620px) {
+  .wrap {
+    padding-inline: 16px;
+  }
   .features,
-  .steps {
+  .steps,
+  .shortcut-grid {
     grid-template-columns: 1fr;
   }
   .card.wide {
@@ -1109,7 +1162,114 @@ footer a:hover {
     padding: 68px 0;
   }
   .hero {
-    padding-top: 120px;
+    padding: 112px 0 64px;
+  }
+  .hero h1 {
+    font-size: clamp(30px, 9vw, 40px);
+  }
+  .hero .lede {
+    font-size: 16px;
+  }
+  .hero .cta {
+    align-items: stretch;
+    flex-direction: column;
+    margin-inline: auto;
+    max-width: 290px;
+  }
+  .hero .cta .btn {
+    justify-content: center;
+  }
+  .shot {
+    margin-top: 48px;
+  }
+  .shot-body {
+    padding: 14px;
+  }
+  .tools {
+    justify-content: flex-start;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .tools i {
+    flex: 0 0 30px;
+  }
+  .shot-actions {
+    flex-wrap: wrap;
+    margin-top: 38px;
+  }
+  .chip {
+    padding-inline: 12px;
+  }
+  .term {
+    overflow-wrap: anywhere;
+    padding: 14px;
+    font-size: 12px;
+  }
+  .card,
+  .step,
+  .dlcard {
+    padding: 22px;
+  }
+  th,
+  td {
+    padding: 11px 14px;
+  }
+  summary {
+    padding: 16px 18px;
+  }
+  details p {
+    padding: 0 18px 18px;
+  }
+  footer .wrap {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  footer .links {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .gh-link {
+    display: none;
+  }
+  /* The section links are already gone by here; the button is the next thing
+     to give, and the hero has its own. */
+  .nav-actions > .btn {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .nav .wrap {
+    gap: 12px;
+  }
+  .nav-actions {
+    gap: 8px;
+  }
+  .lang button {
+    padding-inline: 9px;
+  }
+  .stats {
+    grid-template-columns: 1fr;
+  }
+  .pill {
+    font-size: 12px;
+  }
+  .shot-head {
+    font-size: 12px;
+  }
+  .demo-caption b {
+    display: block;
+    margin-right: 0;
+  }
+  .dlcard .plat {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .dlcard .plat span {
+    margin-left: 0;
+    width: 100%;
   }
 }
 
@@ -1129,24 +1289,3 @@ footer a:hover {
   }
 }
 
-/* Link to the source, in the nav and the footer. */
-.gh-link {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  transition: color 0.18s, border-color 0.18s, background 0.18s;
-}
-.gh-link:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
-  background: rgba(255, 255, 255, 0.04);
-}
-.gh-foot {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
