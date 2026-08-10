@@ -88,6 +88,16 @@ pub enum CaptureMode {
 /// memory back once the user has genuinely moved on.
 const IDLE_RELEASE: std::time::Duration = std::time::Duration::from_secs(600);
 
+/// The idle window, shortened by `CLIPATH_IDLE_SECS` when it is set. Reaching
+/// the released-then-woken state is otherwise a ten-minute wait per attempt,
+/// which is long enough that the path stops being tested.
+fn idle_release_after() -> std::time::Duration {
+    match std::env::var("CLIPATH_IDLE_SECS").ok().and_then(|v| v.parse().ok()) {
+        Some(secs) => std::time::Duration::from_secs(secs),
+        None => IDLE_RELEASE,
+    }
+}
+
 /// How long a capture that has not yet put an overlay on screen is trusted to
 /// still be on its way. Long enough to cover rebuilding the WebViews, short
 /// enough that a genuinely wedged capture is retried on the next keypress
@@ -105,7 +115,7 @@ pub fn release_if_idle(app: &AppHandle) {
     if state.capture_active.load(Ordering::SeqCst) {
         return;
     }
-    if state.last_activity.lock().unwrap().elapsed() < IDLE_RELEASE {
+    if state.last_activity.lock().unwrap().elapsed() < idle_release_after() {
         return;
     }
     let main_visible = app
@@ -250,7 +260,11 @@ fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
     };
 
     if let Some(r) = region {
-        let path = write_region(app, &shots[r.monitor], r)?;
+        // Not remembered: "Capture Previous Region" promises the last
+        // rectangle the user drew. Letting a full-screen or active-window shot
+        // overwrite it turned the shortcut into a duplicate of the one just
+        // pressed, and lost the only thing it uniquely offers.
+        let path = write_region(app, &shots[r.monitor], r, false)?;
         end_capture(app);
         open_editor(app, &path)?;
         crate::dlog(&format!("direct capture done in {}ms", started.elapsed().as_millis()));
@@ -266,8 +280,22 @@ fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
         region: None,
         prev_focus,
     });
-    overlay::ensure_overlays(app, &infos)?;
-    dispatch_overlays(app, &infos);
+    // Same reasoning as the watchdog: building the overlay windows is
+    // event-loop work, so it is posted rather than requested from this thread.
+    // Normally there is nothing to build and the closure only sends the start
+    // event; after an idle release or a monitor change it builds first.
+    let setup = app.clone();
+    let for_setup = infos.clone();
+    app.run_on_main_thread(move || {
+        if let Err(e) = overlay::ensure_overlays(&setup, &for_setup) {
+            crate::dlog(&format!("overlay setup failed: {e}"));
+            end_capture(&setup);
+            notify_error(&setup, "Capture failed", &e);
+            return;
+        }
+        dispatch_overlays(&setup, &for_setup);
+    })
+    .map_err(|e| format!("cannot reach the event loop: {e}"))?;
     crate::dlog(&format!(
         "capture ready: grab {grabbed}ms, dispatch {}ms",
         started.elapsed().as_millis()
@@ -300,13 +328,31 @@ fn watch_for_overlay(app: &AppHandle) {
             None => return,
         };
         crate::dlog("overlay did not respond, rebuilding");
-        overlay::close_overlays(&app);
-        if let Err(e) = overlay::ensure_overlays(&app, &infos) {
-            crate::dlog(&format!("overlay rebuild failed: {e}"));
+        // Handed to the event loop rather than done here. Creating and
+        // destroying windows is event-loop work, and asking for it from
+        // another thread blocks that thread until the loop answers — so a
+        // wedged loop took the watchdog down with it, and the app stopped
+        // responding to anything at all. Posting the work cannot block: if the
+        // loop is stuck the recovery simply does not happen, and the next
+        // keypress tries again.
+        let rebuild = app.clone();
+        if let Err(e) = app.run_on_main_thread(move || {
+            overlay::close_overlays(&rebuild);
+            crate::dlog("rebuild: old overlays let go");
+            match overlay::ensure_overlays(&rebuild, &infos) {
+                Ok(()) => {
+                    crate::dlog("rebuild: new overlays built");
+                    dispatch_overlays(&rebuild, &infos);
+                }
+                Err(e) => {
+                    crate::dlog(&format!("overlay rebuild failed: {e}"));
+                    end_capture(&rebuild);
+                }
+            }
+        }) {
+            crate::dlog(&format!("could not reach the event loop to rebuild: {e}"));
             end_capture(&app);
-            return;
         }
-        dispatch_overlays(&app, &infos);
     });
 }
 
@@ -315,6 +361,7 @@ fn write_region(
     app: &AppHandle,
     shot: &capture::MonitorShot,
     r: Region,
+    remember: bool,
 ) -> Result<PathBuf, String> {
     let snapshot = app.state::<AppState>().settings.lock().unwrap().clone();
     let img = capture::crop(shot, r.x, r.y, r.w, r.h);
@@ -340,7 +387,7 @@ fn write_region(
     crate::history::record(app, &path);
     let state = app.state::<AppState>();
     *state.last_saved.lock().unwrap() = Some(path.clone());
-    if snapshot.capture.remember_previous_region {
+    if remember && snapshot.capture.remember_previous_region {
         *state.prev_region.lock().unwrap() = Some(r);
     }
     Ok(path)
@@ -469,6 +516,17 @@ pub fn get_settings(app: AppHandle) -> Settings {
     app.state::<AppState>().settings.lock().unwrap().clone()
 }
 
+/// The shortcuts Clipath ships with.
+///
+/// Exposed rather than duplicated in the UI: the Settings page kept its own
+/// copy of the list, so "Reset to defaults" handed back the bindings a release
+/// had already moved away from — the user got Ctrl+Shift+A again long after it
+/// stopped being the default.
+#[tauri::command]
+pub fn default_shortcuts() -> settings::Shortcuts {
+    settings::Shortcuts::default()
+}
+
 #[tauri::command]
 pub fn set_settings(app: AppHandle, settings: Settings) -> Result<Vec<String>, String> {
     settings::save(&app, &settings)?;
@@ -566,6 +624,7 @@ pub struct OverlayData {
 
 #[tauri::command]
 pub fn get_overlay_info(app: AppHandle, monitor: usize) -> Result<OverlayData, String> {
+    crate::dlog(&format!("overlay {monitor} asked for its info"));
     let state = app.state::<AppState>();
     let settings = state.settings.lock().unwrap().clone();
     let session = state.session.lock().unwrap();
@@ -585,6 +644,7 @@ pub fn get_overlay_info(app: AppHandle, monitor: usize) -> Result<OverlayData, S
 /// straight into an ImageBitmap.
 #[tauri::command]
 pub fn get_overlay_frame(app: AppHandle, monitor: usize) -> Result<tauri::ipc::Response, String> {
+    crate::dlog(&format!("overlay {monitor} asked for its frame"));
     let state = app.state::<AppState>();
     let session = state.session.lock().unwrap();
     let session = session.as_ref().ok_or("no capture session")?;
@@ -614,6 +674,17 @@ pub fn editor_ready(app: AppHandle) {
     present_main(&app);
 }
 
+/// The overlay page talking about itself — that it loaded, or that something
+/// went wrong on it. Purely a log entry: without it, a capture that never
+/// appears cannot be told apart from a page that was never loaded at all, and
+/// that distinction is the difference between a five-minute fix and a day of
+/// guessing. Deliberately does not touch the capture: a stray script error is
+/// not a reason to cancel a selection the user is in the middle of.
+#[tauri::command]
+pub fn overlay_note(monitor: usize, note: String) {
+    crate::dlog(&format!("overlay {monitor}: {note}"));
+}
+
 /// An overlay could not prepare itself. Without this the capture stays flagged
 /// active with nothing on screen, and the next keypress has to wait out the
 /// grace period before anything happens.
@@ -630,7 +701,7 @@ pub fn overlay_ready(app: AppHandle, monitor: usize) -> Result<(), String> {
         .get_webview_window(&overlay::label_for(monitor))
         .ok_or("overlay window missing")?;
     {
-        // Idle overlays are 1x1; give this one its monitor before showing it.
+        // Give the window its monitor's geometry before showing it.
         let state = app.state::<AppState>();
         let session = state.session.lock().unwrap();
         let session = session.as_ref().ok_or("no capture session")?;
@@ -693,7 +764,7 @@ pub fn commit_region(
                     .monitors
                     .get(monitor)
                     .ok_or_else(|| "monitor not in session".to_string())?;
-                write_region(&app, shot, region)
+                write_region(&app, shot, region, true)
             })
     };
     // Release the capture either way; a failed save must not wedge the
@@ -748,22 +819,31 @@ pub fn finalize_image(
     let snapshot = state.settings.lock().unwrap().clone();
     let target = PathBuf::from(&path);
 
-    let b64 = image_base64
-        .split_once("base64,")
-        .map(|(_, d)| d)
-        .unwrap_or(&image_base64);
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(b64)
-        .map_err(|e| format!("bad image data: {e}"))?;
-    let img = image::load_from_memory(&bytes)
-        .map_err(|e| format!("cannot decode rendered image: {e}"))?
-        .to_rgba8();
-
-    let ext = target
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase())
-        .unwrap_or_else(|| snapshot.output.format.clone());
-    capture::encode_and_write(&img, &target, &ext, snapshot.output.quality)?;
+    // An empty payload means the editor changed nothing, so the file on disk is
+    // already the answer. Re-encoding it would only cost quality and risk a
+    // rounding difference in size — copying a path must not alter the capture.
+    let img = if image_base64.trim().is_empty() {
+        image::open(&target)
+            .map_err(|e| format!("cannot read the screenshot: {e}"))?
+            .to_rgba8()
+    } else {
+        let b64 = image_base64
+            .split_once("base64,")
+            .map(|(_, d)| d)
+            .unwrap_or(&image_base64);
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .map_err(|e| format!("bad image data: {e}"))?;
+        let img = image::load_from_memory(&bytes)
+            .map_err(|e| format!("cannot decode rendered image: {e}"))?
+            .to_rgba8();
+        let ext = target
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_else(|| snapshot.output.format.clone());
+        capture::encode_and_write(&img, &target, &ext, snapshot.output.quality)?;
+        img
+    };
     if !target.exists() {
         return Err("screenshot file missing after save".into());
     }
@@ -1097,7 +1177,7 @@ mod tests {
         for index in [0usize, 1, 7] {
             let label = overlay::label_for(index);
             assert!(label.starts_with("overlay-"));
-            let parsed: usize = label.trim_start_matches("overlay-").parse().unwrap();
+            let parsed: usize = overlay::monitor_of(&label).unwrap();
             assert_eq!(parsed, index);
         }
     }

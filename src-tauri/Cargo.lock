@@ -687,7 +687,7 @@ dependencies = [
 
 [[package]]
 name = "clipath"
-version = "1.0.3"
+version = "1.0.5"
 dependencies = [
  "arboard",
  "base64 0.22.1",

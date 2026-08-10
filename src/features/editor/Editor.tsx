@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, Settings as SettingsIcon } from "lucide-react";
 import { ipc } from "../../lib/ipc";
+import { exportPixelRatio } from "../../lib/exportScale";
 import type { Ann, CounterAnn, FinalAction, RecentItem, Settings, TextAnn, Tool } from "../../types";
 import { AnnotationStage, type CropRect } from "../capture/AnnotationStage";
 import { ActionBar, Toolbar } from "../capture/Toolbar";
@@ -258,11 +259,15 @@ export function Editor({
     // writes a blank file straight over the capture it came from. Better to
     // refuse than to destroy the screenshot.
     if (!image) throw new Error("image is still loading");
-    // Render back out at the image's native resolution.
-    const url = stage.toDataURL({ pixelRatio: 1 / displayScale, mimeType: "image/png" });
+    // Back out at the image's native resolution. The ratio comes from the
+    // stage's actual width rather than from displayScale: the stage size is a
+    // rounded number of pixels, so scaling by 1/displayScale landed a pixel
+    // short and every save shaved a column off the capture.
+    const pixelRatio = exportPixelRatio(image.naturalWidth, stage.width());
+    const url = stage.toDataURL({ pixelRatio, mimeType: "image/png" });
     if (!url || url.length < 128) throw new Error("could not render the image");
     return url;
-  }, [displayScale, image]);
+  }, [image]);
 
   const rememberPrefs = useCallback(async () => {
     const cfg = settings.annotations;
@@ -282,7 +287,10 @@ export function Editor({
       if (busy || !image) return;
       setBusy(true);
       try {
-        const dataUrl = await exportDataUrl();
+        // Nothing drawn means nothing to re-render. Rewriting the file anyway
+        // re-encoded it for no reason — losing a column to rounding, and for
+        // JPEG losing quality — just because the path was copied.
+        const dataUrl = annsRef.current.length > 0 ? await exportDataUrl() : "";
         await rememberPrefs();
         await ipc.finalizeImage(path, action, dataUrl);
         // Copying leaves the editor open so another path can be grabbed from

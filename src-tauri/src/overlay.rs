@@ -1,9 +1,32 @@
 use crate::capture::MonitorInfo;
 use crate::AppState;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
+/// Bumped every time the overlays are torn down.
+///
+/// Destroying a window only *asks* the event loop to destroy it, so when the
+/// request comes from a background thread — which is where every capture runs
+/// — the old label is still taken for a moment afterwards. Rebuilding under
+/// the same label therefore failed with "a webview with label `overlay-0`
+/// already exists", and since rebuilding is the recovery for an overlay that
+/// stopped answering, the recovery could never work: the capture simply died.
+/// A new generation cannot collide with a window on its way out.
+static GENERATION: AtomicUsize = AtomicUsize::new(0);
+
 pub fn label_for(monitor: usize) -> String {
-    format!("overlay-{monitor}")
+    format!("overlay-{monitor}-g{}", GENERATION.load(Ordering::SeqCst))
+}
+
+/// Monitor index carried by an overlay label — and, by returning None for
+/// anything else, the single definition of what an overlay label looks like.
+pub fn monitor_of(label: &str) -> Option<usize> {
+    label
+        .strip_prefix("overlay-")?
+        .split('-')
+        .next()?
+        .parse()
+        .ok()
 }
 
 fn layout_of(monitors: &[MonitorInfo]) -> Vec<(i32, i32, u32, u32)> {
@@ -35,11 +58,7 @@ pub fn ensure_overlays(app: &AppHandle, monitors: &[MonitorInfo]) -> Result<(), 
 
     for m in monitors {
         let label = label_for(m.index);
-        // Belt and braces: a leftover window under this label would fail the
-        // build below, and a failed rebuild is worse than a reused window.
-        if let Some(existing) = app.get_webview_window(&label) {
-            let _ = existing.destroy();
-        }
+        crate::dlog(&format!("building {label}"));
         let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
             .title("Clipath Capture")
             .decorations(false)
@@ -59,6 +78,7 @@ pub fn ensure_overlays(app: &AppHandle, monitors: &[MonitorInfo]) -> Result<(), 
             .build()
             .map_err(|e| format!("cannot create capture overlay: {e}"))?;
         expand(&win, m)?;
+        crate::dlog(&format!("built {label}"));
     }
     *state.overlay_layout.lock().unwrap() = layout;
     Ok(())
@@ -82,19 +102,20 @@ pub fn expand(win: &tauri::WebviewWindow, m: &MonitorInfo) -> Result<(), String>
 pub fn any_exist(app: &AppHandle) -> bool {
     app.webview_windows()
         .keys()
-        .any(|label| label.starts_with("overlay-"))
+        .any(|label| monitor_of(label).is_some())
 }
 
 pub fn close_overlays(app: &AppHandle) {
     for (label, win) in app.webview_windows() {
-        if label.starts_with("overlay-") {
-            // destroy, not close: close only *requests* a close, so the label
-            // is still taken when the caller immediately rebuilds — which made
-            // every attempted overlay rebuild fail with "already exists" and
-            // took the capture down with it.
+        if monitor_of(&label).is_some() {
+            // destroy, not close: close only *requests* a close and leaves
+            // the window itself alive.
             let _ = win.destroy();
         }
     }
+    // After the destroy requests, not before: the labels being retired must
+    // stay the ones `label_for` reports until they have been asked to go.
+    GENERATION.fetch_add(1, Ordering::SeqCst);
     if let Some(state) = app.try_state::<AppState>() {
         state.overlay_layout.lock().unwrap().clear();
     }
@@ -105,10 +126,43 @@ pub fn close_overlays(app: &AppHandle) {
 pub fn hide_overlays(app: &AppHandle) {
     use tauri::Emitter;
     for (label, win) in app.webview_windows() {
-        if !label.starts_with("overlay-") {
+        if monitor_of(&label).is_none() {
             continue;
         }
         let _ = win.hide();
         let _ = app.emit_to(label.as_str(), "capture-end", ());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_generation_never_reuses_a_retired_label() {
+        let before = label_for(0);
+        GENERATION.fetch_add(1, Ordering::SeqCst);
+        let after = label_for(0);
+        assert_ne!(
+            before, after,
+            "a rebuild must not ask for a label the outgoing window still holds"
+        );
+    }
+
+    #[test]
+    fn a_label_still_says_which_monitor_it_belongs_to() {
+        assert_eq!(monitor_of(&label_for(0)), Some(0));
+        assert_eq!(monitor_of(&label_for(3)), Some(3));
+        assert_eq!(monitor_of("main"), None);
+    }
+
+    #[test]
+    fn every_generation_is_still_recognisably_an_overlay() {
+        // hide_overlays and the idle sweep find their windows this way.
+        for _ in 0..3 {
+            assert!(monitor_of(&label_for(1)).is_some());
+            GENERATION.fetch_add(1, Ordering::SeqCst);
+        }
+        assert!(monitor_of("main").is_none(), "the settings window is not an overlay");
     }
 }

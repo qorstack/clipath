@@ -5,6 +5,7 @@ export const ipc = {
   getSettings: () => invoke<Settings>("get_settings"),
   setSettings: (settings: Settings) =>
     invoke<string[]>("set_settings", { settings }),
+  defaultShortcuts: () => invoke<Settings["shortcuts"]>("default_shortcuts"),
   validateFolder: (path: string) => invoke<void>("validate_folder", { path }),
   getDefaultFolder: () => invoke<string>("get_default_folder"),
   checkShortcutAvailable: (shortcut: string) =>

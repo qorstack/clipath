@@ -442,19 +442,13 @@ export function ShortcutsPage() {
         </div>
       )}
       <Button
-        onClick={() =>
-          update({
-            shortcuts: {
-              region: "Ctrl+Shift+A",
-              fullscreen: "Ctrl+Shift+F",
-              activeWindow: "Ctrl+Shift+E",
-              previousRegion: "Ctrl+Shift+R",
-              copyLastPath: "Ctrl+Shift+P",
-              openFolder: "Ctrl+Shift+O",
-              openSettings: "Ctrl+Shift+Comma",
-            },
-          })
-        }
+        onClick={async () => {
+          // Asked for rather than written down here: a second copy of the list
+          // goes stale, and this one did — it handed back Ctrl+Shift+A for
+          // releases after that stopped being the default.
+          const shortcuts = await ipc.defaultShortcuts();
+          setErrors(await update({ shortcuts }));
+        }}
       >
         Reset to defaults
       </Button>

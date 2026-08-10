@@ -5,8 +5,8 @@ use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, GetCursorPos, GetForegroundWindow, GetWindowThreadProcessId, IsIconic,
-    SetForegroundWindow, ShowWindow, SW_RESTORE,
+    BringWindowToTop, GetCursorPos, GetForegroundWindow, GetWindowThreadProcessId, IsHungAppWindow,
+    IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE,
 };
 
 pub fn foreground_window() -> isize {
@@ -33,22 +33,47 @@ pub fn force_foreground(hwnd: isize) {
         if fg == target {
             return;
         }
-        let fg_thread = GetWindowThreadProcessId(fg, None);
+
+        // Attaching joins this thread's input queue to the other window's, and
+        // a shared queue means a shared fate: if that application has stopped
+        // pumping messages, this thread stops with it. Clipath froze exactly
+        // that way — unclickable, uncloseable — so a window that is already
+        // not responding is never attached to. Losing the foreground is a far
+        // smaller problem than hanging.
+        let fg_thread = if fg.0.is_null() || IsHungAppWindow(fg).as_bool() {
+            0
+        } else {
+            GetWindowThreadProcessId(fg, None)
+        };
         let this_thread = GetCurrentThreadId();
         let attached = fg_thread != 0
             && fg_thread != this_thread
             && AttachThreadInput(this_thread, fg_thread, true).as_bool();
+
         let _ = BringWindowToTop(target);
         let _ = SetForegroundWindow(target);
-        let _ = SetFocus(Some(target));
         if attached {
+            // Only meaningful while the queues are joined, and it must happen
+            // before they are separated again.
+            let _ = SetFocus(Some(target));
             let _ = AttachThreadInput(this_thread, fg_thread, false);
         }
     }
 }
 
+/// Hand the foreground back to whatever the user was in before a capture.
+///
+/// Deliberately plain: this runs on the UI thread when the editor closes, and
+/// the attach trick there is what let another application's hang become ours.
+/// Best effort is the right level — if Windows refuses, it flashes a taskbar
+/// button and nothing is broken.
 pub fn restore_foreground(hwnd: isize) {
-    force_foreground(hwnd);
+    if hwnd == 0 {
+        return;
+    }
+    unsafe {
+        let _ = SetForegroundWindow(HWND(hwnd as *mut _));
+    }
 }
 
 pub fn cursor_pos() -> (i32, i32) {

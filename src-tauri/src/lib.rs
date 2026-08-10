@@ -154,6 +154,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
+            commands::default_shortcuts,
             commands::set_settings,
             commands::validate_folder,
             commands::get_default_folder,
@@ -165,6 +166,7 @@ pub fn run() {
             commands::get_overlay_info,
             commands::get_overlay_frame,
             commands::overlay_ready,
+            commands::overlay_note,
             commands::overlay_failed,
             commands::editor_ready,
             commands::commit_region,
