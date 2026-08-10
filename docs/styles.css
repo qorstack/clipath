@@ -1128,3 +1128,25 @@ footer a:hover {
     transform: none;
   }
 }
+
+/* Link to the source, in the nav and the footer. */
+.gh-link {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+.gh-link:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+}
+.gh-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}

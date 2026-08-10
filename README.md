@@ -2,6 +2,8 @@
 
 **Capture. Annotate. Paste the path.**
 
+[**Download for Windows**](https://github.com/qorstack/clipath/releases/latest/download/Clipath-Setup-x64.exe) · [clipath.qorstack.com](https://clipath.qorstack.com) · [Releases](https://github.com/qorstack/clipath/releases)
+
 Clipath is a fast, minimal Windows screenshot utility built for developer workflows.
 Every capture is **saved automatically** to a folder you choose, and the absolute
 file path can be **copied to the clipboard instantly** — ready to paste into
@@ -48,10 +50,49 @@ The trade is real and worth knowing: the first capture after that quiet spell
 pays the rebuild, measured at ~2.2 s on a two-monitor setup. Every capture
 after it is back to ~200 ms until the next idle release.
 
+## Install
+
+Download [`Clipath-Setup-x64.exe`](https://github.com/qorstack/clipath/releases/latest/download/Clipath-Setup-x64.exe) and run it. It installs into your
+own user profile, so Windows never asks for administrator rights.
+
+Windows may show "Windows protected your PC" because the installer is not signed
+with a paid certificate — click **More info**, then **Run anyway**.
+
 ## Website
 
-`docs/` holds the Clipath landing page and usage guide — a static, dependency-free
-site in English and Thai, ready to serve from GitHub Pages.
+[**clipath.qorstack.com**](https://clipath.qorstack.com) — the landing page and the
+full usage guide, in English and Thai. It is served straight from `docs/`: a
+static, dependency-free site with no build step.
+
+## Deploying the site
+
+`docs/CNAME` already names the domain, so GitHub applies it as soon as Pages is
+turned on. Two things have to happen, in this order:
+
+**1. Point the subdomain at GitHub.** At whoever hosts DNS for `qorstack.com`,
+add one record:
+
+| Type | Name / Host | Value | TTL |
+|---|---|---|---|
+| `CNAME` | `clipath` | `qorstack.github.io` | automatic |
+
+The value is the *user* domain, not the repository — no `/clipath` on the end.
+A subdomain takes a CNAME; only an apex domain would need A records.
+
+**2. Turn on Pages.** Repository → **Settings** → **Pages**:
+
+- Source: **Deploy from a branch**
+- Branch: **main**, folder **/docs** → Save
+- Custom domain should already read `clipath.qorstack.com` from the CNAME file.
+  Wait for the DNS check to go green — it can take from a few minutes to an hour
+  — then tick **Enforce HTTPS**.
+
+**3. Fill in About.** On the repository front page, the gear beside **About**:
+set the description and put `https://clipath.qorstack.com` in **Website**, so the
+link shows in the sidebar.
+
+Until DNS propagates the site is also live at
+`https://qorstack.github.io/clipath/`.
 
 ## Development
 

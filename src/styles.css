@@ -90,11 +90,10 @@ body.pin-body {
   background: transparent;
 }
 
-/* The logo is white line art — invert it so it reads on light backgrounds. */
+/* The logo carries its own colour and its own glow, so it needs no help from
+   the theme. It used to be white line art, which had to be inverted to survive
+   a light background — doing that to a colour image turns it inside out. */
 .app-logo {
-  filter: invert(1);
-}
-.dark .app-logo {
   filter: none;
 }
 
