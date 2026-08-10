@@ -100,14 +100,6 @@ pub fn close_overlays(app: &AppHandle) {
     }
 }
 
-/// Whether a selection overlay is actually on screen. Used to tell a real
-/// capture in progress from a stale busy flag.
-pub fn any_visible(app: &AppHandle) -> bool {
-    app.webview_windows()
-        .iter()
-        .any(|(label, win)| label.starts_with("overlay-") && win.is_visible().unwrap_or(false))
-}
-
 /// Put the overlays away and let them drop everything the capture needed:
 /// the frozen frame bitmap, the canvas backing store and the window surface.
 pub fn hide_overlays(app: &AppHandle) {

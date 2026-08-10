@@ -113,8 +113,23 @@ cd src-tauri && cargo test # Rust: settings migration, filenames, capture, short
 ## Building
 
 ```sh
-pnpm tauri build
+pnpm tauri build      # what ships: optimised, LTO, installer included
+pnpm build:fast       # what to use while working
 ```
+
+`build:fast` is `tauri build --debug --no-bundle`. The release profile spends
+its time on link-time optimisation and a single codegen unit, which is right
+for the binary people download and wrong for the twentieth build of an
+afternoon. Measured on this project, after a one-line Rust change:
+
+| | |
+|---|---|
+| `pnpm tauri build` | ~150 s |
+| `pnpm build:fast`, first run | ~40 s |
+| `pnpm build:fast`, thereafter | ~16 s |
+
+The output lands at `src-tauri/target/debug/clipath.exe`. Nothing about the
+release build changes — only which one you reach for.
 
 Produces `src-tauri/target/release/Clipath.exe` and an NSIS installer under
 `src-tauri/target/release/bundle/nsis/`.

@@ -9,6 +9,7 @@ Add-Type -AssemblyName System.Drawing
 
 $root = Split-Path -Parent $PSScriptRoot
 $logoPath = Join-Path $root "assets\images\clipath-logo.png"
+$installerArtPath = Join-Path $root "assets\images\installer-sidebar-art.png"
 $installerDir = Join-Path $root "src-tauri\installer"
 $iconsDir = Join-Path $root "src-tauri\icons"
 $appAssets = Join-Path $root "src\assets"
@@ -89,6 +90,18 @@ function Draw-Logo($g, [int]$x, [int]$y, [int]$size) {
   $scaled = Get-Scaled $size
   $g.DrawImage($scaled, $x, $y)
   $scaled.Dispose()
+}
+
+# The installer uses its own portrait, high-resolution source. Keeping the
+# source at 910x1698 and scaling only once into NSIS's fixed-size bitmaps avoids
+# repeatedly enlarging/downscaling the small application icon.
+$installerArt = [System.Drawing.Image]::FromFile($installerArtPath)
+function Draw-Installer-Mark($g, [int]$x, [int]$y, [int]$size) {
+  # Square crop around the generated mark; the lower half of the source is
+  # intentionally empty to leave room for installer copy.
+  $srcRect = New-Object System.Drawing.Rectangle(70, 205, 770, 770)
+  $dstRect = New-Object System.Drawing.Rectangle($x, $y, $size, $size)
+  $g.DrawImage($installerArt, $dstRect, $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
 }
 
 # --- ICO -----------------------------------------------------------------------
@@ -183,15 +196,19 @@ $tagBrush = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator
 
 $h1 = New-Canvas 150 57 "#0A1020" "#12203C" 20
 $g = $h1.Graphics
-Draw-Logo $g 10 8 41
+Draw-Installer-Mark $g 10 8 41
 $font = New-Object System.Drawing.Font("Segoe UI Semibold", 13)
 $g.DrawString("Clipath", $font, $white, 56, 16)
 $h1.Bitmap.Save((Join-Path $installerDir "header.bmp"), [System.Drawing.Imaging.ImageFormat]::Bmp)
 $g.Dispose(); $h1.Bitmap.Dispose()
 
-$s1 = New-Canvas 164 314 "#060B16" "#132444" 60
-$g = $s1.Graphics
-Draw-Logo $g 22 68 120
+$s1 = New-Object System.Drawing.Bitmap(164, 314, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
+$g = [System.Drawing.Graphics]::FromImage($s1)
+Set-Quality $g
+$g.DrawImage($installerArt,
+  (New-Object System.Drawing.Rectangle(0, 0, 164, 314)),
+  (New-Object System.Drawing.Rectangle(12, 0, 886, 1698)),
+  [System.Drawing.GraphicsUnit]::Pixel)
 $title = New-Object System.Drawing.Font("Segoe UI Semibold", 17)
 $sz = $g.MeasureString("Clipath", $title)
 $g.DrawString("Clipath", $title, $white, (164 - $sz.Width) / 2, 196)
@@ -202,8 +219,8 @@ $g.DrawString("Every screenshot,`nready to paste", $tagFont, $tagBrush,
   (New-Object System.Drawing.RectangleF(10, 226, 144, 40)), $fmt)
 $pen = New-Object System.Drawing.Pen([System.Drawing.ColorTranslator]::FromHtml("#2F80FF"), 2)
 $g.DrawLine($pen, 62, 282, 102, 282); $pen.Dispose()
-$s1.Bitmap.Save((Join-Path $installerDir "sidebar.bmp"), [System.Drawing.Imaging.ImageFormat]::Bmp)
-$g.Dispose(); $s1.Bitmap.Dispose()
+$s1.Save((Join-Path $installerDir "sidebar.bmp"), [System.Drawing.Imaging.ImageFormat]::Bmp)
+$g.Dispose(); $s1.Dispose()
 
 $d1 = New-Canvas 660 420 "#060B16" "#132444" 45
 $g = $d1.Graphics
@@ -222,4 +239,5 @@ $d1.Bitmap.Save((Join-Path $installerDir "dmg-background.png"), [System.Drawing.
 $g.Dispose(); $d1.Bitmap.Dispose()
 
 $master.Dispose()
+$installerArt.Dispose()
 Write-Output "regenerated app icon, tray icon, in-app logo, site logo and favicon, and the installer art"
