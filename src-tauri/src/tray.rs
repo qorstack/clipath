@@ -181,9 +181,13 @@ pub fn refresh(app: &AppHandle, settings: &Settings) {
     let _ = tray.set_tooltip(Some(format!("Clipath — {shortcut} to capture")));
 }
 
-pub fn show_main(app: &AppHandle, page: &str) {
-    let win = match app.get_webview_window("main") {
-        Some(w) => w,
+/// The main window, created if the idle sweep destroyed it. Deliberately does
+/// not show it: a WebView that has just been created has nothing to paint, and
+/// a window put on screen at that moment is a rectangle of its background
+/// colour until the bundle loads.
+pub fn ensure_main(app: &AppHandle) -> Option<tauri::WebviewWindow> {
+    match app.get_webview_window("main") {
+        Some(w) => Some(w),
         None => {
             // Recreate the settings window if it was ever destroyed.
             let built = tauri::WebviewWindowBuilder::new(
@@ -201,14 +205,18 @@ pub fn show_main(app: &AppHandle, page: &str) {
             .background_color(tauri::window::Color(28, 28, 30, 255))
             .build();
             match built {
-                Ok(w) => w,
+                Ok(w) => Some(w),
                 Err(e) => {
                     crate::dlog(&format!("cannot recreate main window: {e}"));
-                    return;
+                    None
                 }
             }
         }
-    };
+    }
+}
+
+pub fn show_main(app: &AppHandle, page: &str) {
+    let Some(win) = ensure_main(app) else { return };
     let _ = win.show();
     let _ = win.unminimize();
     let _ = win.set_focus();

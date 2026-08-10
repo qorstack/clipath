@@ -166,6 +166,7 @@ pub fn run() {
             commands::get_overlay_frame,
             commands::overlay_ready,
             commands::overlay_failed,
+            commands::editor_ready,
             commands::commit_region,
             commands::cancel_capture,
             commands::take_pending_editor,

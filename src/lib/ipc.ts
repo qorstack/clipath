@@ -34,6 +34,7 @@ export const ipc = {
   saveImageAs: (target: string, imageBase64: string) =>
     invoke<void>("save_image_as", { target, imageBase64 }),
   closeEditor: () => invoke<void>("close_editor"),
+  editorReady: () => invoke<void>("editor_ready"),
 
   // files / clipboard / history
   listRecent: (limit: number) => invoke<RecentItem[]>("list_recent", { limit }),

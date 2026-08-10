@@ -372,11 +372,11 @@ fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    // show_main recreates the window if the idle sweep released it.
-    tray::show_main(app, "editor");
-    let win = app
-        .get_webview_window("main")
-        .ok_or("main window unavailable")?;
+    // Created but deliberately not shown yet. After the idle sweep this is a
+    // brand-new WebView with nothing to paint, and showing it here is what put
+    // an empty rectangle of background colour on screen. It goes up when the
+    // editor reports that it has the capture rendered.
+    let win = tray::ensure_main(app).ok_or("main window unavailable")?;
 
     if let Ok((iw, ih)) = image::image_dimensions(path) {
         let (max_w, max_h) = win
@@ -394,13 +394,20 @@ fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
         let _ = win.set_size(PhysicalSize::new(want_w, want_h));
         let _ = win.center();
     }
-    let _ = win.set_focus();
-    // The window was moved and resized after show_main brought it forward, so
-    // claim the foreground again now it is where it will stay.
-    if let Ok(hwnd) = win.hwnd() {
-        winutil::force_foreground(hwnd.0 as isize);
-    }
     let _ = app.emit_to("main", "open-editor", path.to_string_lossy().to_string());
+
+    // A frontend that never reports ready must not leave the capture with no
+    // window at all, so the wait has a floor.
+    let fallback = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(2500));
+        if let Some(w) = fallback.get_webview_window("main") {
+            if !w.is_visible().unwrap_or(false) {
+                crate::dlog("editor never reported ready, showing anyway");
+                present_main(&fallback);
+            }
+        }
+    });
     Ok(())
 }
 
@@ -586,6 +593,25 @@ pub fn get_overlay_frame(app: AppHandle, monitor: usize) -> Result<tauri::ipc::R
         .get(monitor)
         .ok_or("monitor not in session")?;
     Ok(tauri::ipc::Response::new(shot.image.as_raw().clone()))
+}
+
+/// Put the main window on screen and in front. Separated so both the ready
+/// signal and the fallback raise it exactly the same way.
+pub fn present_main(app: &AppHandle) {
+    let Some(win) = app.get_webview_window("main") else { return };
+    let _ = win.show();
+    let _ = win.unminimize();
+    let _ = win.set_focus();
+    if let Ok(hwnd) = win.hwnd() {
+        winutil::force_foreground(hwnd.0 as isize);
+    }
+}
+
+/// The editor has the capture on screen. Until this arrives the window stays
+/// hidden rather than showing an unpainted WebView.
+#[tauri::command]
+pub fn editor_ready(app: AppHandle) {
+    present_main(&app);
 }
 
 /// An overlay could not prepare itself. Without this the capture stays flagged

@@ -32,7 +32,14 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
   const pending = useRef<{ x: number; y: number; shift: boolean } | null>(null);
   const rafId = useRef(0);
 
-  const scale = info?.scale ?? 1;
+  // How many device pixels one CSS pixel is worth, measured rather than taken
+  // from the monitor's reported scale factor. The frozen frame fills this
+  // window exactly, so its size over the window's CSS size is the conversion by
+  // construction. The reported factor disagreed with what the WebView actually
+  // used and produced regions wider than the screen, which were then clamped —
+  // so the saved image did not match the box that was drawn.
+  const scaleX = info && window.innerWidth ? info.width / window.innerWidth : 1;
+  const scaleY = info && window.innerHeight ? info.height / window.innerHeight : 1;
 
   // ---- session start -------------------------------------------------------
   const loading = useRef(false);
@@ -166,10 +173,15 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
   const commit = useCallback(
     async (r: Rect) => {
       setPhase("committing");
-      const px = Math.round(r.x * scale);
-      const py = Math.round(r.y * scale);
-      const pw = Math.max(1, Math.round(r.w * scale));
-      const ph = Math.max(1, Math.round(r.h * scale));
+      const maxW = info?.width ?? Infinity;
+      const maxH = info?.height ?? Infinity;
+      // Clamped here as well as in the backend: a region that runs past the
+      // frame gets trimmed on the way in, and a trimmed region is exactly the
+      // mismatch between the box drawn and the image saved.
+      const px = Math.min(Math.max(0, Math.round(r.x * scaleX)), Math.max(0, maxW - 1));
+      const py = Math.min(Math.max(0, Math.round(r.y * scaleY)), Math.max(0, maxH - 1));
+      const pw = Math.max(1, Math.min(Math.round(r.w * scaleX), maxW - px));
+      const ph = Math.max(1, Math.min(Math.round(r.h * scaleY), maxH - py));
       try {
         await ipc.commitRegion(monitor, px, py, pw, ph);
       } catch (e) {
@@ -177,7 +189,7 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
         setPhase("idle");
       }
     },
-    [monitor, scale],
+    [monitor, scaleX, scaleY, info],
   );
 
   const onUp = () => {
@@ -207,8 +219,8 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
   const busy = phase === "committing";
   const showChrome = phase === "idle" || phase === "dragging";
   const dims = sel && {
-    w: Math.round(sel.w * scale),
-    h: Math.round(sel.h * scale),
+    w: Math.round(sel.w * scaleX),
+    h: Math.round(sel.h * scaleY),
   };
 
   return (
@@ -286,7 +298,7 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
       )}
 
       {settings?.capture.showMagnifier && showChrome && (
-        <Magnifier cursor={cursor} bitmapRef={bitmapRef} scale={scale} />
+        <Magnifier cursor={cursor} bitmapRef={bitmapRef} scaleX={scaleX} scaleY={scaleY} />
       )}
 
       {busy && (
@@ -318,11 +330,13 @@ const MAG_ZOOM = 8;
 function Magnifier({
   cursor,
   bitmapRef,
-  scale,
+  scaleX,
+  scaleY,
 }: {
   cursor: { x: number; y: number };
   bitmapRef: React.RefObject<ImageBitmap | null>;
-  scale: number;
+  scaleX: number;
+  scaleY: number;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -337,8 +351,8 @@ function Magnifier({
     ctx.clearRect(0, 0, MAG_SIZE, MAG_SIZE);
     ctx.drawImage(
       bitmap,
-      cursor.x * scale - src / 2,
-      cursor.y * scale - src / 2,
+      cursor.x * scaleX - src / 2,
+      cursor.y * scaleY - src / 2,
       src,
       src,
       0,
@@ -354,7 +368,7 @@ function Magnifier({
       MAG_ZOOM,
       MAG_ZOOM,
     );
-  }, [cursor, bitmapRef, scale]);
+  }, [cursor, bitmapRef, scaleX, scaleY]);
 
   const left =
     cursor.x + 24 + MAG_SIZE > window.innerWidth ? cursor.x - MAG_SIZE - 24 : cursor.x + 24;
@@ -378,7 +392,7 @@ function Magnifier({
         className="px-2 py-0.5 text-center text-[10.5px] font-medium tabular-nums text-white"
         style={{ background: "rgba(20,20,22,0.85)" }}
       >
-        {Math.round(cursor.x * scale)}, {Math.round(cursor.y * scale)}
+        {Math.round(cursor.x * scaleX)}, {Math.round(cursor.y * scaleY)}
       </div>
     </div>
   );

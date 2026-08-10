@@ -89,8 +89,22 @@ export function Editor({
         objectUrl.current = URL.createObjectURL(blob);
         const img = new Image();
         img.src = objectUrl.current;
-        img.onload = () => !cancelled && setImage(img);
-        img.onerror = () => !cancelled && setError("Could not open this image");
+        img.onload = () => {
+          if (cancelled) return;
+          setImage(img);
+          // The window is held back until there is something in it. Two frames:
+          // the first schedules the paint of this state, the second runs once
+          // it has been handed to the compositor.
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => ipc.editorReady().catch(() => {})),
+          );
+        };
+        img.onerror = () => {
+          if (cancelled) return;
+          setError("Could not open this image");
+          // Still show the window: an error the user can read beats nothing.
+          ipc.editorReady().catch(() => {});
+        };
       } catch (e) {
         if (!cancelled) setError(String(e));
       }
