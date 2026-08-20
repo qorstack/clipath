@@ -146,8 +146,10 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
   }, [settings]);
 
   // ---- pointer handling (rAF-throttled so dragging stays at display rate) --
+  const lastFlush = useRef(0);
   const flush = useCallback(() => {
     rafId.current = 0;
+    lastFlush.current = performance.now();
     const p = pending.current;
     if (!p) return;
     setCursor({ x: p.x, y: p.y });
@@ -172,7 +174,16 @@ export function CaptureOverlay({ monitor }: { monitor: number }) {
 
   const onMove = (e: React.PointerEvent) => {
     pending.current = { x: e.clientX, y: e.clientY, shift: e.shiftKey };
-    if (!rafId.current) rafId.current = requestAnimationFrame(flush);
+    if (!rafId.current) {
+      rafId.current = requestAnimationFrame(flush);
+    } else if (performance.now() - lastFlush.current > 50) {
+      // A frame callback has been owed for several frames: Chromium still
+      // counts this window as hidden — seen after the screen wakes — and
+      // throttles rAF to a crawl while pointer events keep arriving. Flush
+      // directly so the selection tracks the pointer regardless; the stale
+      // callback re-runs this with the same pending point, which is harmless.
+      flush();
+    }
   };
 
   const onDown = (e: React.PointerEvent) => {

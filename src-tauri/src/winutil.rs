@@ -76,6 +76,24 @@ pub fn restore_foreground(hwnd: isize) {
     }
 }
 
+/// Make WebView2 notice that its window is back on screen.
+///
+/// Showing a window that Chromium froze while it was hidden — most reliably
+/// after the display slept or the session was locked — sometimes leaves the
+/// renderer running but presenting nothing: input works, the capture commits,
+/// and none of it is ever painted. Toggling the controller's visibility is the
+/// transition Chromium cannot miss, and the position notification makes it
+/// re-check where the window actually is. Called after every show of a window
+/// that was hidden; on a healthy webview both calls are cheap no-ops.
+pub fn wake_webview(win: &tauri::WebviewWindow) {
+    let _ = win.with_webview(|wv| unsafe {
+        let controller = wv.controller();
+        let _ = controller.SetIsVisible(false);
+        let _ = controller.SetIsVisible(true);
+        let _ = controller.NotifyParentWindowPositionChanged();
+    });
+}
+
 pub fn cursor_pos() -> (i32, i32) {
     let mut pt = windows::Win32::Foundation::POINT::default();
     unsafe {

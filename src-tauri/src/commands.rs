@@ -438,6 +438,9 @@ fn present_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
         if let Ok(hwnd) = win.hwnd() {
             winutil::force_foreground(hwnd.0 as isize);
         }
+        // "Visible" only means the flag is set — after a long idle the
+        // renderer behind it may be frozen and showing a stale frame.
+        winutil::wake_webview(&win);
         let _ = app.emit_to("main", "open-editor", path.to_string_lossy().to_string());
         return Ok(());
     }
@@ -692,6 +695,7 @@ pub fn present_main(app: &AppHandle) {
     if let Ok(hwnd) = win.hwnd() {
         winutil::force_foreground(hwnd.0 as isize);
     }
+    winutil::wake_webview(&win);
 }
 
 /// The editor has the capture on screen. Until this arrives the window stays
@@ -741,6 +745,10 @@ pub fn overlay_ready(app: AppHandle, monitor: usize) -> Result<(), String> {
     }
     win.show().map_err(|e| e.to_string())?;
     let _ = win.set_always_on_top(true);
+    // The window has been hidden since the last capture, and a renderer frozen
+    // while it was hidden otherwise keeps handling input without ever painting
+    // the selection being drawn.
+    winutil::wake_webview(&win);
 
     app.state::<AppState>()
         .capture_shown

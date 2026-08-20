@@ -1,6 +1,6 @@
 [package]
 name = "clipath"
-version = "1.0.6"
+version = "1.0.7"
 description = "Capture. Annotate. Paste the path."
 authors = ["Clipath"]
 edition = "2021"
@@ -24,6 +24,9 @@ tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 xcap = "0.6"
+# Same version tauri's runtime uses; pulled in directly to reach the WebView2
+# controller from `with_webview` (see winutil::wake_webview).
+webview2-com = "0.38"
 image = "0.25"
 arboard = "3"
 chrono = "0.4"

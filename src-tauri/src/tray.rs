@@ -205,6 +205,7 @@ pub fn ensure_main(app: &AppHandle) -> Option<tauri::WebviewWindow> {
             // often than it is created from the config — and without a
             // background colour a WebView shows white until it has painted.
             .background_color(tauri::window::Color(28, 28, 30, 255))
+            .additional_browser_args(crate::BROWSER_ARGS)
             .build();
             match built {
                 Ok(w) => {
@@ -234,6 +235,7 @@ pub fn show_main(app: &AppHandle, page: &str) {
     if let Ok(hwnd) = win.hwnd() {
         crate::winutil::force_foreground(hwnd.0 as isize);
     }
+    crate::winutil::wake_webview(&win);
     use tauri::Emitter;
     let _ = app.emit_to("main", "navigate", page.to_string());
 }

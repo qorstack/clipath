@@ -75,6 +75,7 @@ pub fn ensure_overlays(app: &AppHandle, monitors: &[MonitorInfo]) -> Result<(), 
             // frozen screenshot lands is then a full-screen white flash, so it
             // is given the near-black the scrim would have shown anyway.
             .background_color(tauri::window::Color(8, 8, 12, 255))
+            .additional_browser_args(crate::BROWSER_ARGS)
             .build()
             .map_err(|e| format!("cannot create capture overlay: {e}"))?;
         expand(&win, m)?;

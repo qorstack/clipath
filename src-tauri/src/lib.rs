@@ -15,6 +15,24 @@ use std::sync::Mutex;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Shortcut, ShortcutState};
 
+/// Browser arguments for every WebView2 this app creates.
+///
+/// `CalculateNativeWinOcclusion` is Chromium watching whether a window is
+/// covered so it can stop rendering it. A display that sleeps or a session
+/// that locks marks every window occluded, and the "visible again" transition
+/// is sometimes missed — the page keeps running and answering input while the
+/// compositor never presents another frame. That is exactly a selection that
+/// commits and saves but is never seen being drawn, so the tracker is turned
+/// off. The `ms*` entries are wry's own defaults, which passing this argument
+/// would otherwise silently drop.
+///
+/// Every window must pass the same string (the config carries a copy for the
+/// startup-built main window): WebView2 processes sharing a data directory
+/// share one browser process, and only the arguments of whichever webview
+/// starts it are honoured.
+pub const BROWSER_ARGS: &str =
+    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion";
+
 /// Debug logging to %TEMP%\clipath-debug.log (stderr redirection is
 /// unreliable for GUI processes launched detached).
 pub fn dlog(msg: &str) {
