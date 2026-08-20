@@ -19,6 +19,25 @@ const MIME: Record<string, string> = {
   webp: "image/webp",
 };
 
+/**
+ * Resolves after the next two frames — or after 150ms if frames never come.
+ * Frame callbacks stop entirely in a window Chromium believes is hidden, and
+ * the editor is exactly that until editorReady puts it on screen, so waiting
+ * on them alone deadlocked every cold open into the backend's slow fallback.
+ */
+const nextPaint = () =>
+  new Promise<void>((resolve) => {
+    let done = false;
+    const go = () => {
+      if (!done) {
+        done = true;
+        resolve();
+      }
+    };
+    requestAnimationFrame(() => requestAnimationFrame(go));
+    window.setTimeout(go, 150);
+  });
+
 export function Editor({
   path: requestedPath,
   settings,
@@ -93,12 +112,10 @@ export function Editor({
         img.onload = () => {
           if (cancelled) return;
           setImage(img);
-          // The window is held back until there is something in it. Two frames:
-          // the first schedules the paint of this state, the second runs once
-          // it has been handed to the compositor.
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => ipc.editorReady().catch(() => {})),
-          );
+          // The window is held back until there is something in it. Two frames
+          // give the paint time to reach the compositor — but only when frames
+          // are being serviced at all, hence the timeout inside nextPaint.
+          nextPaint().then(() => ipc.editorReady().catch(() => {}));
         };
         img.onerror = () => {
           if (cancelled) return;
@@ -252,7 +269,7 @@ export function Editor({
   // ---- export --------------------------------------------------------------
   const exportDataUrl = useCallback(async (): Promise<string> => {
     setSelectedId(null);
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await nextPaint();
     const stage = stageRef.current;
     if (!stage) throw new Error("editor not ready");
     // Without the image the stage renders an empty canvas, and exporting that
@@ -361,7 +378,7 @@ export function Editor({
     setBusy(true);
     try {
       setSelectedId(null);
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await nextPaint();
       const stage = stageRef.current;
       if (!stage) throw new Error("editor not ready");
       // Crop coordinates are image-space; the stage is scaled, so convert to

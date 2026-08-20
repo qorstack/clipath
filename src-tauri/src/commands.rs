@@ -265,9 +265,13 @@ fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
         // overwrite it turned the shortcut into a duplicate of the one just
         // pressed, and lost the only thing it uniquely offers.
         let path = write_region(app, &shots[r.monitor], r, false)?;
+        let saved = started.elapsed().as_millis();
         end_capture(app);
         open_editor(app, &path)?;
-        crate::dlog(&format!("direct capture done in {}ms", started.elapsed().as_millis()));
+        crate::dlog(&format!(
+            "direct capture done in {}ms (grab {grabbed}ms, saved {saved}ms)",
+            started.elapsed().as_millis()
+        ));
         return Ok(());
     }
 
@@ -375,8 +379,10 @@ fn write_region(
     r: Region,
     remember: bool,
 ) -> Result<PathBuf, String> {
+    let t0 = std::time::Instant::now();
     let snapshot = app.state::<AppState>().settings.lock().unwrap().clone();
     let img = capture::crop(shot, r.x, r.y, r.w, r.h);
+    let cropped = t0.elapsed().as_millis();
     let ext = capture::extension_for_format(&snapshot.output.format);
     let path = filename::unique_path(
         Path::new(&snapshot.output.folder),
@@ -395,7 +401,13 @@ fn write_region(
             p[0], p[1], p[2], p[3], img.width(), img.height(), r.monitor
         ));
     }
+    let checked = t0.elapsed().as_millis();
     capture::encode_and_write(&img, &path, &snapshot.output.format, snapshot.output.quality)?;
+    crate::dlog(&format!(
+        "write_region: crop {cropped}ms, uniform-check {}ms, encode+write {}ms",
+        checked - cropped,
+        t0.elapsed().as_millis() - checked
+    ));
     crate::history::record(app, &path);
     let state = app.state::<AppState>();
     *state.last_saved.lock().unwrap() = Some(path.clone());
@@ -472,10 +484,12 @@ fn present_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
     crate::dlog("editor: window ready and waiting for the page");
 
     // A frontend that never reports ready must not leave the capture with no
-    // window at all, so the wait has a floor.
+    // window at all, so the wait has a floor. The page now reports ready
+    // within ~150ms of decoding the image even when frame callbacks are
+    // stalled, so this is a genuine last resort rather than the usual path.
     let fallback = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(2500));
+        std::thread::sleep(std::time::Duration::from_millis(1200));
         match fallback.get_webview_window("main") {
             Some(w) if !w.is_visible().unwrap_or(false) => {
                 crate::dlog("editor never reported ready, showing anyway");

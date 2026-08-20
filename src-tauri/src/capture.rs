@@ -143,8 +143,19 @@ pub fn encode_and_write(
                 img.write_with_encoder(encoder).map_err(|e| e.to_string())?;
             }
             _ => {
-                img.save_with_format(&tmp, image::ImageFormat::Png)
-                    .map_err(|e| e.to_string())?;
+                let file = fs::File::create(&tmp).map_err(|e| e.to_string())?;
+                let writer = std::io::BufWriter::new(file);
+                // Fast compression, deliberately: the default level spent
+                // ~1.4s on a full monitor, and that encode sits between
+                // pressing the shortcut and the editor appearing. A slightly
+                // larger file for a several-times-faster save is the right
+                // trade for something written once.
+                let encoder = image::codecs::png::PngEncoder::new_with_quality(
+                    writer,
+                    image::codecs::png::CompressionType::Fast,
+                    image::codecs::png::FilterType::Adaptive,
+                );
+                img.write_with_encoder(encoder).map_err(|e| e.to_string())?;
             }
         }
         Ok(())

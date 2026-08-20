@@ -89,7 +89,10 @@ pub fn run() {
         )
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            // Boot-time launches must not put a window in the user's face;
+            // the flag is how startup below tells them apart from a launch
+            // the user asked for.
+            Some(vec!["--hidden"]),
         ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
@@ -124,7 +127,10 @@ pub fn run() {
             {
                 let h = handle.clone();
                 std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(1200));
+                    // Short: a capture taken moments after launching the app
+                    // should find the overlays already warm, not still queued
+                    // behind a courtesy delay.
+                    std::thread::sleep(std::time::Duration::from_millis(250));
                     commands::prewarm(&h);
                     if std::env::var("CLIPATH_TEST_CAPTURE").is_ok() {
                         std::thread::sleep(std::time::Duration::from_millis(800));
@@ -137,11 +143,22 @@ pub fn run() {
                     }
                 });
             }
-            if !loaded.onboarding_completed {
+            // Launching the app by hand puts the window on screen — starting
+            // into nothing but a tray icon reads as the app not launching at
+            // all. Only the autostart entry, which passes --hidden, is meant
+            // to begin silently in the background.
+            let start_hidden = std::env::args().any(|a| a == "--hidden");
+            if !loaded.onboarding_completed || !start_hidden {
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.show();
                     let _ = win.set_focus();
                 }
+            }
+            // Refresh the autostart entry: one registered before --hidden
+            // existed would keep popping the window on every boot.
+            if loaded.general.launch_at_startup {
+                use tauri_plugin_autostart::ManagerExt;
+                let _ = handle.autolaunch().enable();
             }
             Ok(())
         })

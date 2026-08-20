@@ -1,5 +1,6 @@
 import Konva from "konva";
 import { useEffect, useRef, useState } from "react";
+import { ipc } from "../../lib/ipc";
 import { lockAxis, snapToAngle, squareOf } from "./geometry";
 import {
   Stage,
@@ -93,6 +94,38 @@ export function AnnotationStage(props: StageProps) {
 
   const [draft, setDraft] = useState<Ann | null>(null);
   const drawing = useRef(false);
+
+  // Konva pushes every update through requestAnimationFrame, and frame
+  // callbacks stop when Chromium believes the window is hidden — a state a
+  // window shown right after the screen wakes can be stuck in. A stroke drawn
+  // then lands in the scene graph and never on the canvas; mounting draws
+  // synchronously, which is why switching images used to reveal it. So: a
+  // heartbeat frame is requested on every render, and when the previous one
+  // visibly never came, the stage is drawn synchronously instead of trusting
+  // the frame that Konva scheduled.
+  const lastFrame = useRef(0);
+  const framePending = useRef(false);
+  const stallNoted = useRef(false);
+  useEffect(() => {
+    const now = performance.now();
+    if (lastFrame.current === 0) lastFrame.current = now;
+    if (!framePending.current) {
+      framePending.current = true;
+      requestAnimationFrame(() => {
+        framePending.current = false;
+        lastFrame.current = performance.now();
+      });
+    }
+    if (now - lastFrame.current > 120) {
+      stageRef.current?.draw();
+      if (!stallNoted.current) {
+        stallNoted.current = true;
+        ipc
+          .pageNote("frame callbacks stalled; drawing the stage synchronously")
+          .catch(() => {});
+      }
+    }
+  });
 
   const updateAnn = (id: string, patch: Partial<Ann>) => {
     setAnnsLive(anns.map((a) => (a.id === id ? ({ ...a, ...patch } as Ann) : a)));
