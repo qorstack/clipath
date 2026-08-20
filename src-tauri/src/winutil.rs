@@ -1,7 +1,11 @@
 //! Thin Win32 helpers: foreground window tracking and active-window bounds.
 
+use windows::core::BOOL;
 use windows::Win32::Foundation::{HWND, RECT};
-use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+use windows::Win32::Graphics::Dwm::{
+    DwmGetWindowAttribute, DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_EXTENDED_FRAME_BOUNDS,
+    DWMWA_TRANSITIONS_FORCEDISABLED,
+};
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -73,6 +77,46 @@ pub fn restore_foreground(hwnd: isize) {
     }
     unsafe {
         let _ = SetForegroundWindow(HWND(hwnd as *mut _));
+    }
+}
+
+/// Remove a window from the screen instantly, or put it back — without going
+/// through hide/show.
+///
+/// Hiding animates: DWM fades the window out over ~200ms, and a screenshot
+/// grabbed during the fade contains a half-transparent ghost of it — the
+/// "captures stacked into each other" bug. Cloaking is DWM simply not
+/// compositing the window: effective at the next frame, no animation, and the
+/// window keeps its visible state so nothing downstream changes behaviour.
+pub fn set_cloaked(hwnd: isize, cloaked: bool) {
+    if hwnd == 0 {
+        return;
+    }
+    let hwnd = HWND(hwnd as *mut _);
+    let set = |attr, on: bool| {
+        let value = BOOL::from(on);
+        let r = unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                attr,
+                &value as *const _ as *const _,
+                std::mem::size_of::<BOOL>() as u32,
+            )
+        };
+        if let Err(e) = r {
+            crate::dlog(&format!("cloak: DwmSetWindowAttribute({attr:?}, {on}) failed: {e}"));
+        }
+    };
+    // Windows 11 animates even the cloak; a grab taken mid-fade still caught
+    // the ghost. Transitions are forced off around the cloak so it really is
+    // a single-frame disappearance, and turned back on afterwards so the
+    // window keeps its ordinary animations everywhere else.
+    if cloaked {
+        set(DWMWA_TRANSITIONS_FORCEDISABLED, true);
+        set(DWMWA_CLOAK, true);
+    } else {
+        set(DWMWA_CLOAK, false);
+        set(DWMWA_TRANSITIONS_FORCEDISABLED, false);
     }
 }
 

@@ -36,7 +36,16 @@ function MainContent() {
         if (p) {
           setEditorPath(p);
           setShowSettings(false);
+          return;
         }
+        // Nothing pending means the window opened on its own — at app start,
+        // or from the tray. The most recent capture is what the app is for,
+        // so it opens there rather than on Settings. Functional set: a real
+        // capture that raced this lookup must win.
+        return ipc.listRecent(1).then((r) => {
+          const latest = r[0]?.path;
+          if (latest) setEditorPath((cur) => cur ?? latest);
+        });
       })
       .catch(console.error);
 

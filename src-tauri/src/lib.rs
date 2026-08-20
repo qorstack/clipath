@@ -60,6 +60,9 @@ pub struct AppState {
     /// Window visibility is not a substitute: an overlay left on screen by an
     /// earlier capture makes a wedged one look healthy.
     pub capture_shown: std::sync::atomic::AtomicBool,
+    /// The main window was visible when this capture started and was hidden so
+    /// it would not appear inside its own screenshot; end_capture puts it back.
+    pub main_hidden_for_capture: std::sync::atomic::AtomicBool,
     /// Last time the user captured or used the editor, for the idle sweep.
     pub last_activity: Mutex<std::time::Instant>,
     /// Capture waiting to be shown, read by the main window as it mounts.
@@ -111,6 +114,7 @@ pub fn run() {
                 prev_focus: Mutex::new(0),
                 capture_started: Mutex::new(None),
                 capture_shown: std::sync::atomic::AtomicBool::new(false),
+                main_hidden_for_capture: std::sync::atomic::AtomicBool::new(false),
                 last_activity: Mutex::new(std::time::Instant::now()),
                 pending_editor: Mutex::new(None),
                 quitting: std::sync::atomic::AtomicBool::new(false),

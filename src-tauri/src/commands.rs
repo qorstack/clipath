@@ -197,6 +197,18 @@ fn end_capture(app: &AppHandle) {
     overlay::hide_overlays(app);
     state.capture_shown.store(false, Ordering::SeqCst);
     state.capture_active.store(false, Ordering::SeqCst);
+    // A main window cloaked so it would stay out of its own screenshot comes
+    // back on every way out of a capture — commit, cancel, or failure. On a
+    // commit the editor is about to swap the new capture in, so what returns
+    // is the window the user already had, exactly where it was.
+    if state.main_hidden_for_capture.swap(false, Ordering::SeqCst) {
+        if let Some(win) = app.get_webview_window("main") {
+            if let Ok(hwnd) = win.hwnd() {
+                winutil::set_cloaked(hwnd.0 as isize, false);
+            }
+            winutil::wake_webview(&win);
+        }
+    }
 }
 
 fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
@@ -205,6 +217,29 @@ fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
     *app.state::<AppState>().capture_started.lock().unwrap() = Some(started);
     let prev_focus = winutil::foreground_window();
     *app.state::<AppState>().prev_focus.lock().unwrap() = prev_focus;
+
+    // The editor must not appear inside its own screenshot: left on screen it
+    // stacks the previous capture into the new one, visibly nested. Cloaked
+    // rather than hidden — hide() fades out over ~200ms and a grab during the
+    // fade catches a half-transparent ghost of the window. Restored by
+    // end_capture on every way out. The pause covers the one compositor frame
+    // the cloak needs to take effect.
+    let main_visible = app
+        .get_webview_window("main")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
+    crate::dlog(&format!("capture: main window visible = {main_visible}"));
+    if main_visible {
+        if let Some(win) = app.get_webview_window("main") {
+            if let Ok(hwnd) = win.hwnd() {
+                winutil::set_cloaked(hwnd.0 as isize, true);
+                app.state::<AppState>()
+                    .main_hidden_for_capture
+                    .store(true, Ordering::SeqCst);
+                std::thread::sleep(std::time::Duration::from_millis(150));
+            }
+        }
+    }
 
     let shots = capture::capture_all_monitors()?;
     let grabbed = started.elapsed().as_millis();
