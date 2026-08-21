@@ -117,7 +117,15 @@ export function AnnotationStage(props: StageProps) {
       });
     }
     if (now - lastFrame.current > 120) {
-      stageRef.current?.draw();
+      // Caught, not propagated: a Konva draw error thrown from an effect
+      // unmounts the entire React tree — the app became a permanently blank
+      // window. Inside Konva's own frame callback the same error is merely a
+      // dropped frame, and that is the severity it deserves here too.
+      try {
+        stageRef.current?.draw();
+      } catch (e) {
+        ipc.pageNote(`synchronous stage draw failed: ${e}`).catch(() => {});
+      }
       if (!stallNoted.current) {
         stallNoted.current = true;
         ipc
@@ -466,13 +474,19 @@ function AnnNode({
     }
     case "rect": {
       const a = ann as ShapeAnn;
+      // A draft dragged up or left has negative extents until mouse-up
+      // normalises it — and a negative width reaches the corner-radius arc as
+      // a negative radius, which throws mid-draw. The throw is why a box
+      // dragged that way rendered nothing at all.
+      const rx = a.w < 0 ? a.x + a.w : a.x;
+      const ry = a.h < 0 ? a.y + a.h : a.y;
       return (
         <Rect
           {...common}
-          x={a.x}
-          y={a.y}
-          width={a.w}
-          height={a.h}
+          x={rx}
+          y={ry}
+          width={Math.abs(a.w)}
+          height={Math.abs(a.h)}
           stroke={a.color}
           strokeWidth={a.strokeWidth}
           cornerRadius={2}

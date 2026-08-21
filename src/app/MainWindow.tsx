@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { ipc } from "../lib/ipc";
 import { SettingsProvider, useApplyTheme, useSettings } from "../lib/settings";
@@ -122,11 +122,59 @@ function Booting({ error }: { error: string | null }) {
   );
 }
 
+/**
+ * The last line of defence against a blank window. Without a boundary, any
+ * error that escapes a render or an effect makes React discard the entire
+ * tree — the app then sits on screen as an empty rectangle of background
+ * colour with no explanation and no way out, and stays that way for every
+ * capture after.
+ */
+class CrashGuard extends React.Component<
+  { children: React.ReactNode },
+  { error: string | null }
+> {
+  state = { error: null as string | null };
+
+  static getDerivedStateFromError(e: unknown) {
+    return { error: String(e) };
+  }
+
+  componentDidCatch(e: unknown) {
+    ipc.pageNote(`react tree crashed: ${e}`).catch(() => {});
+  }
+
+  render() {
+    if (this.state.error === null) return this.props.children;
+    return (
+      <div
+        className="flex h-full w-full flex-col items-center justify-center gap-3 px-8 text-center"
+        style={{ background: "var(--bg)", color: "var(--text-2)" }}
+      >
+        <div style={{ color: "var(--text)", fontWeight: 560 }}>
+          Something went wrong in this window
+        </div>
+        <div style={{ fontSize: 12, maxWidth: 460, wordBreak: "break-word" }}>
+          {this.state.error}
+        </div>
+        <button
+          className="mt-2 rounded-lg px-4 py-2"
+          style={{ background: "var(--accent)", color: "#fff" }}
+          onClick={() => window.location.reload()}
+        >
+          Reload
+        </button>
+      </div>
+    );
+  }
+}
+
 export function MainWindow() {
 
   return (
-    <SettingsProvider>
-      <MainContent />
-    </SettingsProvider>
+    <CrashGuard>
+      <SettingsProvider>
+        <MainContent />
+      </SettingsProvider>
+    </CrashGuard>
   );
 }

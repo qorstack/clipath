@@ -751,6 +751,19 @@ pub fn present_main(app: &AppHandle) {
 /// hidden rather than showing an unpainted WebView.
 #[tauri::command]
 pub fn editor_ready(app: AppHandle) {
+    // A window rebuilt during a capture loads its page and opens the most
+    // recent capture on its own — and this report then arrives while the
+    // selection overlay is up. Presenting now would put the app in the user's
+    // face in the middle of them drawing a region; the commit shows the
+    // window when there is actually something new to look at.
+    if app
+        .state::<AppState>()
+        .capture_active
+        .load(Ordering::SeqCst)
+    {
+        crate::dlog("editor: rendered during a capture, staying hidden");
+        return;
+    }
     crate::dlog("editor: reported the capture is rendered");
     present_main(&app);
 }
