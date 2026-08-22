@@ -5,7 +5,7 @@ import { useSettings } from "../../lib/settings";
 import { Button, Toggle } from "../../components/ui";
 import { ACCENTS } from "../settings/pages";
 import { ShortcutRecorder } from "../shortcuts/ShortcutRecorder";
-import logoUrl from "../../assets/clipath-logo.png";
+import logoUrl from "../../assets/logo.png";
 
 export function Onboarding() {
   const { settings, update } = useSettings();

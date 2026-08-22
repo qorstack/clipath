@@ -7,7 +7,7 @@ import { useSettings } from "../../lib/settings";
 import { Button, Row, Section, Select, SliderRow, Toggle } from "../../components/ui";
 import { ShortcutRecorder } from "../shortcuts/ShortcutRecorder";
 import type { RecentItem, Settings } from "../../types";
-import logoUrl from "../../assets/clipath-logo.png";
+import logoUrl from "../../assets/logo.png";
 
 // ---------------------------------------------------------------------------
 

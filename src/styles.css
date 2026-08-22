@@ -90,11 +90,17 @@ body.pin-body {
   background: transparent;
 }
 
-/* The logo carries its own colour and its own glow, so it needs no help from
-   the theme. It used to be white line art, which had to be inverted to survive
-   a light background — doing that to a colour image turns it inside out. */
+/* The mark is white on transparency, which is right on the dark surfaces the
+   app normally wears and invisible on the light ones. Inverting is safe here
+   and only here: a single-colour mark inverts to a single colour, where the
+   colour logo this replaced turned inside out. 0.89 rather than a full 1 lands
+   on the same near-black the dark theme uses for its own surfaces instead of a
+   hard pure black. */
 .app-logo {
   filter: none;
+}
+html:not(.dark) .app-logo {
+  filter: invert(0.89);
 }
 
 .panel-shadow {
