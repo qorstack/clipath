@@ -3,8 +3,8 @@
 use windows::core::BOOL;
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Dwm::{
-    DwmGetWindowAttribute, DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_EXTENDED_FRAME_BOUNDS,
-    DWMWA_TRANSITIONS_FORCEDISABLED,
+    DwmFlush, DwmGetWindowAttribute, DwmSetWindowAttribute, DWMWA_CLOAK,
+    DWMWA_EXTENDED_FRAME_BOUNDS, DWMWA_TRANSITIONS_FORCEDISABLED,
 };
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
@@ -136,6 +136,30 @@ pub fn wake_webview(win: &tauri::WebviewWindow) {
         let _ = controller.SetIsVisible(true);
         let _ = controller.NotifyParentWindowPositionChanged();
     });
+}
+
+/// Block until the compositor has drawn at least one frame since now.
+///
+/// Cloaking a window is a request to DWM, not an instant fact: the window is
+/// still on screen until the next composition pass, and a screenshot grabbed
+/// before then contains it. The wait used to be a flat 150ms — an eighth of a
+/// second added to every capture taken while the editor was open, to cover
+/// something that takes one frame. `DwmFlush` returns when that frame has
+/// actually been composed, so the wait is as long as it needs to be and no
+/// longer. Two of them: the first returns at the boundary of the pass that may
+/// already have been in flight when the cloak was set.
+pub fn wait_for_composition() {
+    unsafe {
+        for _ in 0..2 {
+            if DwmFlush().is_err() {
+                // Composition off or unavailable — fall back to roughly two
+                // frames rather than returning to a screen that still has the
+                // window on it.
+                std::thread::sleep(std::time::Duration::from_millis(32));
+                return;
+            }
+        }
+    }
 }
 
 pub fn cursor_pos() -> (i32, i32) {

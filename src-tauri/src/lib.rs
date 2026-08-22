@@ -26,12 +26,22 @@ use tauri_plugin_global_shortcut::{Shortcut, ShortcutState};
 /// off. The `ms*` entries are wry's own defaults, which passing this argument
 /// would otherwise silently drop.
 ///
+/// The three `--disable-*-backgrounding` style flags below are the other half
+/// of the same problem. Chromium deprioritises a page whose window is hidden:
+/// timers are throttled to about one wake-up a minute, frame callbacks stop,
+/// and the renderer can be parked entirely. Clipath's overlays spend nearly
+/// all their life hidden, waiting for a shortcut — so an app left alone for an
+/// hour woke up to a page that answered the capture event seconds late or not
+/// at all, which is exactly "the shortcut does nothing". Nothing is running in
+/// these pages while they are hidden, so keeping them at full priority costs
+/// no real work.
+///
 /// Every window must pass the same string (the config carries a copy for the
 /// startup-built main window): WebView2 processes sharing a data directory
 /// share one browser process, and only the arguments of whichever webview
 /// starts it are honoured.
 pub const BROWSER_ARGS: &str =
-    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion";
+    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion,IntensiveWakeUpThrottling --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows";
 
 /// Debug logging to %TEMP%\clipath-debug.log (stderr redirection is
 /// unreliable for GUI processes launched detached).
@@ -40,7 +50,12 @@ pub fn dlog(msg: &str) {
     let path = std::env::temp_dir().join("clipath-debug.log");
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
         use std::io::Write;
-        let _ = writeln!(f, "{} {msg}", chrono::Local::now().format("%H:%M:%S%.3f"));
+        // One write per line, not one per format fragment. `writeln!` issues a
+        // separate write for each piece, and two threads logging at once then
+        // interleave mid-line — the record of exactly the concurrent moments
+        // that need reading later comes out shredded.
+        let line = format!("{} {msg}\n", chrono::Local::now().format("%H:%M:%S%.3f"));
+        let _ = f.write_all(line.as_bytes());
     }
 }
 
@@ -63,13 +78,11 @@ pub struct AppState {
     /// The main window was visible when this capture started and was hidden so
     /// it would not appear inside its own screenshot; end_capture puts it back.
     pub main_hidden_for_capture: std::sync::atomic::AtomicBool,
-    /// Last time the user captured or used the editor, for the idle sweep.
-    pub last_activity: Mutex<std::time::Instant>,
     /// Capture waiting to be shown, read by the main window as it mounts.
     pub pending_editor: Mutex<Option<String>>,
     /// Set only by Quit. Every other route out of the event loop — the last
-    /// window closing, the idle sweep tearing the WebViews down, a plugin
-    /// asking to exit — is refused, so Clipath survives in the tray.
+    /// window closing, a plugin asking to exit — is refused, so Clipath
+    /// survives in the tray.
     pub quitting: std::sync::atomic::AtomicBool,
 }
 
@@ -115,7 +128,6 @@ pub fn run() {
                 capture_started: Mutex::new(None),
                 capture_shown: std::sync::atomic::AtomicBool::new(false),
                 main_hidden_for_capture: std::sync::atomic::AtomicBool::new(false),
-                last_activity: Mutex::new(std::time::Instant::now()),
                 pending_editor: Mutex::new(None),
                 quitting: std::sync::atomic::AtomicBool::new(false),
             });
@@ -126,8 +138,8 @@ pub fn run() {
             }
             crate::dlog("started, shortcuts registered");
             // Build the capture overlays while the app is idle so the first
-            // shortcut press is as fast as every later one, then release them
-            // again once the user has stopped capturing.
+            // shortcut press is as fast as every later one. They are then kept
+            // for the life of the process: see the note on `prewarm`.
             {
                 let h = handle.clone();
                 std::thread::spawn(move || {
@@ -140,10 +152,6 @@ pub fn run() {
                         std::thread::sleep(std::time::Duration::from_millis(800));
                         crate::dlog("test trigger");
                         commands::run_action(h.clone(), "region");
-                    }
-                    loop {
-                        std::thread::sleep(std::time::Duration::from_secs(30));
-                        commands::release_if_idle(&h);
                     }
                 });
             }
@@ -229,8 +237,8 @@ pub fn run() {
         .expect("error while building Clipath")
         .run(|app, event| {
             // Keep running in the tray when every window is closed or hidden.
-            // Only Quit is allowed through: the idle sweep destroys the last
-            // WebView on purpose, and that must not take the process with it.
+            // Only Quit is allowed through: hiding the last window must not
+            // take the process with it.
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
                 let quitting = app
                     .try_state::<AppState>()

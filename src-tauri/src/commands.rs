@@ -42,6 +42,11 @@ fn monitor_at(shots: &[capture::MonitorShot], x: i32, y: i32) -> usize {
 // Action dispatch (tray, global shortcuts, commands)
 // ---------------------------------------------------------------------------
 
+/// Every action is reachable from the tray menu, and a tray menu click is
+/// handled on the event-loop thread — so anything here that touches the disk
+/// or hands a path to the shell has to leave that thread first, or the whole
+/// app stops answering for as long as it takes. Only `open-settings` stays
+/// inline: showing a window is event-loop work to begin with.
 pub fn run_action(app: AppHandle, action: &str) {
     match action {
         "region" => spawn_capture(app, CaptureMode::Region),
@@ -49,21 +54,25 @@ pub fn run_action(app: AppHandle, action: &str) {
         "active-window" => spawn_capture(app, CaptureMode::ActiveWindow),
         "previous-region" => spawn_capture(app, CaptureMode::PreviousRegion),
         "copy-last-path" => {
-            if let Err(e) = do_copy_last_path(&app) {
-                notify_error(&app, "Couldn't copy path", &e);
-            }
+            std::thread::spawn(move || {
+                if let Err(e) = do_copy_last_path(&app) {
+                    notify_error(&app, "Couldn't copy path", &e);
+                }
+            });
         }
         "open-folder" => {
-            let folder = app
-                .state::<AppState>()
-                .settings
-                .lock()
-                .unwrap()
-                .output
-                .folder
-                .clone();
-            let _ = fs::create_dir_all(&folder);
-            let _ = app.opener().open_path(folder, None::<&str>);
+            std::thread::spawn(move || {
+                let folder = app
+                    .state::<AppState>()
+                    .settings
+                    .lock()
+                    .unwrap()
+                    .output
+                    .folder
+                    .clone();
+                let _ = fs::create_dir_all(&folder);
+                let _ = app.opener().open_path(folder, None::<&str>);
+            });
         }
         "open-settings" => tray::show_main(&app, "general"),
         _ => {}
@@ -77,69 +86,25 @@ pub enum CaptureMode {
     PreviousRegion,
 }
 
-/// How long Clipath stays warm after the last capture. Keeping the WebViews
-/// alive costs a few hundred megabytes; keeping them alive all day for a tool
-/// used in bursts is not a trade worth making, so they are released once the
-/// user has clearly moved on and rebuilt on the next capture.
-/// Three minutes was too eager. Screenshots come in bursts with gaps of
-/// several minutes inside one piece of work, and every release costs the next
-/// capture ~2s to rebuild the WebViews — long enough that the shortcut reads
-/// as broken. Ten minutes keeps a working session warm while still handing the
-/// memory back once the user has genuinely moved on.
-const IDLE_RELEASE: std::time::Duration = std::time::Duration::from_secs(600);
-
-/// The idle window, shortened by `CLIPATH_IDLE_SECS` when it is set. Reaching
-/// the released-then-woken state is otherwise a ten-minute wait per attempt,
-/// which is long enough that the path stops being tested.
-fn idle_release_after() -> std::time::Duration {
-    match std::env::var("CLIPATH_IDLE_SECS").ok().and_then(|v| v.parse().ok()) {
-        Some(secs) => std::time::Duration::from_secs(secs),
-        None => IDLE_RELEASE,
-    }
-}
-
 /// How long a capture that has not yet put an overlay on screen is trusted to
 /// still be on its way. Long enough to cover rebuilding the WebViews, short
 /// enough that a genuinely wedged capture is retried on the next keypress
 /// rather than swallowed.
 const STARTUP_GRACE: std::time::Duration = std::time::Duration::from_millis(1500);
 
-pub fn touch_activity(app: &AppHandle) {
-    *app.state::<AppState>().last_activity.lock().unwrap() = std::time::Instant::now();
-}
-
-/// Tear down the WebViews when nothing has happened for a while. The tray
-/// icon and global shortcuts live in the Rust process and are unaffected.
-pub fn release_if_idle(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    if state.capture_active.load(Ordering::SeqCst) {
-        return;
-    }
-    if state.last_activity.lock().unwrap().elapsed() < idle_release_after() {
-        return;
-    }
-    let main_visible = app
-        .get_webview_window("main")
-        .and_then(|w| w.is_visible().ok())
-        .unwrap_or(false);
-    if main_visible {
-        return;
-    }
-    let had_windows = overlay::any_exist(app) || app.get_webview_window("main").is_some();
-    if !had_windows {
-        return;
-    }
-    overlay::close_overlays(app);
-    if let Some(win) = app.get_webview_window("main") {
-        // destroy, not close: the close handler deliberately keeps this
-        // window alive by hiding it instead.
-        let _ = win.destroy();
-    }
-    crate::dlog("idle: released webviews");
-}
-
-/// Build overlay windows ahead of time so the first shortcut press is as fast
-/// as every later one.
+/// Build the overlay windows ahead of time, and keep them for the life of the
+/// process.
+///
+/// Clipath used to hand the WebViews back after ten idle minutes. It cost far
+/// more than the memory it saved: the next capture had to rebuild them, which
+/// took ~1s before the selection appeared, and rebuilding the editor window
+/// from inside the commit — an IPC call, so on the event-loop thread — could
+/// wedge the loop outright. The app then answered no shortcut, showed no
+/// window and had to be killed. A screenshot tool that is sometimes not there
+/// when the shortcut is pressed is not worth a few hundred megabytes, so the
+/// windows now stay warm and every capture takes the same fast path. Idle
+/// overlays already drop the frozen frame and their canvas backing store on
+/// `capture-end`, which is the bulk of what they hold.
 pub fn prewarm(app: &AppHandle) {
     match capture::monitor_layout() {
         Ok(monitors) => {
@@ -213,7 +178,6 @@ fn end_capture(app: &AppHandle) {
 
 fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
     let started = std::time::Instant::now();
-    touch_activity(app);
     *app.state::<AppState>().capture_started.lock().unwrap() = Some(started);
     let prev_focus = winutil::foreground_window();
     *app.state::<AppState>().prev_focus.lock().unwrap() = prev_focus;
@@ -222,8 +186,8 @@ fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
     // stacks the previous capture into the new one, visibly nested. Cloaked
     // rather than hidden — hide() fades out over ~200ms and a grab during the
     // fade catches a half-transparent ghost of the window. Restored by
-    // end_capture on every way out. The pause covers the one compositor frame
-    // the cloak needs to take effect.
+    // end_capture on every way out. The wait is for the compositor frame that
+    // takes the cloak, and ends the moment that frame is done.
     let main_visible = app
         .get_webview_window("main")
         .and_then(|w| w.is_visible().ok())
@@ -236,7 +200,7 @@ fn start_capture(app: &AppHandle, mode: CaptureMode) -> Result<(), String> {
                 app.state::<AppState>()
                     .main_hidden_for_capture
                     .store(true, Ordering::SeqCst);
-                std::thread::sleep(std::time::Duration::from_millis(150));
+                winutil::wait_for_composition();
             }
         }
     }
@@ -387,7 +351,15 @@ fn watch_for_overlay(app: &AppHandle) {
         // loop is stuck the recovery simply does not happen, and the next
         // keypress tries again.
         let rebuild = app.clone();
+        // Whether the loop ever ran the work below. Posting always succeeds —
+        // it only queues — so success here says nothing about the loop being
+        // alive, and a loop that never drains its queue used to leave the user
+        // pressing a shortcut that logged "rebuilding" forever and did
+        // nothing. This is the difference between "slow" and "stuck".
+        let ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let ran_in_loop = ran.clone();
         if let Err(e) = app.run_on_main_thread(move || {
+            ran_in_loop.store(true, Ordering::SeqCst);
             overlay::close_overlays(&rebuild);
             crate::dlog("rebuild: old overlays let go");
             match overlay::ensure_overlays(&rebuild, &infos) {
@@ -403,6 +375,20 @@ fn watch_for_overlay(app: &AppHandle) {
         }) {
             crate::dlog(&format!("could not reach the event loop to rebuild: {e}"));
             end_capture(&app);
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        if !ran.load(Ordering::SeqCst) {
+            crate::dlog("event loop never ran the rebuild — the UI thread is blocked");
+            // Released anyway: the flag is the only thing standing between the
+            // user and their next attempt, and holding it while nothing can
+            // possibly appear just makes the shortcut look dead twice over.
+            end_capture(&app);
+            notify_error(
+                &app,
+                "Capture failed",
+                "Clipath stopped responding. Quit it from the tray and start it again.",
+            );
         }
     });
 }
@@ -456,7 +442,6 @@ fn write_region(
 /// already on screen just swaps to the new capture — resizing and recentring
 /// a window the user is working in would be disruptive.
 fn open_editor(app: &AppHandle, path: &Path) -> Result<(), String> {
-    touch_activity(app);
     // Recorded so a main window that is still starting up can pick the
     // capture up itself rather than racing the event below.
     *app.state::<AppState>().pending_editor.lock().unwrap() =
@@ -606,7 +591,7 @@ pub fn default_shortcuts() -> settings::Shortcuts {
     settings::Shortcuts::default()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_settings(app: AppHandle, settings: Settings) -> Result<Vec<String>, String> {
     settings::save(&app, &settings)?;
     *app.state::<AppState>().settings.lock().unwrap() = settings.clone();
@@ -625,7 +610,7 @@ pub fn set_settings(app: AppHandle, settings: Settings) -> Result<Vec<String>, S
     Ok(errors)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn validate_folder(path: String) -> Result<(), String> {
     let p = PathBuf::from(&path);
     fs::create_dir_all(&p).map_err(|e| format!("Cannot create this folder: {e}"))?;
@@ -635,7 +620,7 @@ pub fn validate_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_default_folder(app: AppHandle) -> String {
     settings::default_screenshot_folder(&app)
 }
@@ -721,7 +706,7 @@ pub fn get_overlay_info(app: AppHandle, monitor: usize) -> Result<OverlayData, S
 /// Raw RGBA pixels of a monitor's frozen frame. Raw beats an encoded format
 /// here: no encoder in Rust, no decoder in the browser, and the bytes go
 /// straight into an ImageBitmap.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_overlay_frame(app: AppHandle, monitor: usize) -> Result<tauri::ipc::Response, String> {
     crate::dlog(&format!("overlay {monitor} asked for its frame"));
     let state = app.state::<AppState>();
@@ -840,7 +825,7 @@ pub fn overlay_ready(app: AppHandle, monitor: usize) -> Result<(), String> {
 }
 
 /// Selection finished: crop, save, dismiss the overlay, open the editor.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn commit_region(
     app: AppHandle,
     monitor: usize,
@@ -898,7 +883,7 @@ pub fn cancel_capture(app: AppHandle) {
 
 /// File bytes for the editor. Served over IPC (not the asset protocol) so the
 /// annotation canvas stays same-origin and can still be exported.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_image(path: String) -> Result<tauri::ipc::Response, String> {
     let bytes = fs::read(&path).map_err(|e| format!("cannot read image: {e}"))?;
     Ok(tauri::ipc::Response::new(bytes))
@@ -906,7 +891,7 @@ pub fn read_image(path: String) -> Result<tauri::ipc::Response, String> {
 
 /// Render → write → verify → clipboard, in that order: the copied path always
 /// points at a file that is already fully written.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn finalize_image(
     app: AppHandle,
     path: String,
@@ -974,7 +959,7 @@ pub fn finalize_image(
     Ok(target.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_image_as(app: AppHandle, target: String, image_base64: String) -> Result<(), String> {
     let b64 = image_base64
         .split_once("base64,")
@@ -1005,7 +990,6 @@ pub fn save_image_as(app: AppHandle, target: String, image_base64: String) -> Re
 /// copied path can be pasted straight away.
 #[tauri::command]
 pub fn close_editor(app: AppHandle) {
-    touch_activity(&app);
     hide_main(&app);
     let prev = *app.state::<AppState>().prev_focus.lock().unwrap();
     winutil::restore_foreground(prev);
@@ -1073,7 +1057,7 @@ pub struct RecentItem {
     pub modified: u64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_recent(app: AppHandle, limit: usize) -> Vec<RecentItem> {
     let folder = app
         .state::<AppState>()
@@ -1129,7 +1113,7 @@ pub fn list_recent(app: AppHandle, limit: usize) -> Vec<RecentItem> {
     items
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn copy_path_text(app: AppHandle, path: String) -> Result<(), String> {
     let template = app
         .state::<AppState>()
@@ -1149,12 +1133,12 @@ pub fn copy_text(text: String) -> Result<(), String> {
     clipboard::copy_text(&text)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn copy_image_file(path: String) -> Result<(), String> {
     clipboard::copy_image_file(Path::new(&path))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_file(app: AppHandle, path: String) -> Result<(), String> {
     fs::remove_file(&path).map_err(|e| format!("cannot delete: {e}"))?;
     crate::history::forget(&app, Path::new(&path));
@@ -1166,14 +1150,14 @@ pub fn delete_file(app: AppHandle, path: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reveal_in_folder(app: AppHandle, path: String) -> Result<(), String> {
     app.opener()
         .reveal_item_in_dir(&path)
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
     app.opener()
         .open_path(path, None::<&str>)

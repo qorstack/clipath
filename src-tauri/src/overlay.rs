@@ -90,20 +90,15 @@ pub fn ensure_overlays(app: &AppHandle, monitors: &[MonitorInfo]) -> Result<(), 
 /// Idle overlays deliberately keep full monitor size even while hidden.
 /// Shrinking them to free the compositing surface reads to Chromium as an
 /// occluded window and it freezes the renderer, so the overlay stops
-/// answering the event that starts a capture. Idle memory is reclaimed by
-/// tearing the windows down entirely instead.
+/// answering the event that starts a capture. What an idle overlay gives back
+/// instead is everything the last capture needed — the frozen frame and the
+/// canvas backing store, dropped on `capture-end`.
 pub fn expand(win: &tauri::WebviewWindow, m: &MonitorInfo) -> Result<(), String> {
     win.set_position(PhysicalPosition::new(m.x, m.y))
         .map_err(|e| e.to_string())?;
     win.set_size(PhysicalSize::new(m.width, m.height))
         .map_err(|e| e.to_string())?;
     Ok(())
-}
-
-pub fn any_exist(app: &AppHandle) -> bool {
-    app.webview_windows()
-        .keys()
-        .any(|label| monitor_of(label).is_some())
 }
 
 pub fn close_overlays(app: &AppHandle) {
@@ -159,7 +154,7 @@ mod tests {
 
     #[test]
     fn every_generation_is_still_recognisably_an_overlay() {
-        // hide_overlays and the idle sweep find their windows this way.
+        // hide_overlays finds its windows this way.
         for _ in 0..3 {
             assert!(monitor_of(&label_for(1)).is_some());
             GENERATION.fetch_add(1, Ordering::SeqCst);
