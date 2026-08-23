@@ -2,6 +2,7 @@ import Konva from "konva";
 import { useEffect, useRef, useState } from "react";
 import { ipc } from "../../lib/ipc";
 import { lockAxis, snapToAngle, squareOf } from "./geometry";
+import { clampSize, type SizeMap } from "../editor/sizes";
 import {
   Stage,
   Layer,
@@ -51,7 +52,12 @@ interface StageProps {
   bgImage: CanvasImageSource | null;
   tool: Tool;
   color: string;
-  strokeWidth: number;
+  /**
+   * The size each kind of annotation is drawn at. Every kind measures its size
+   * differently — a stroke width, a font size, a counter diameter — so the
+   * whole map is passed and the tool picks the entry it draws with.
+   */
+  sizes: SizeMap;
   annCfg: Settings["annotations"];
   anns: Ann[];
   setAnnsLive: (a: Ann[]) => void;
@@ -83,7 +89,7 @@ export function AnnotationStage(props: StageProps) {
     displayScale,
     tool,
     color,
-    strokeWidth,
+    sizes,
     annCfg,
     anns,
     setAnnsLive,
@@ -151,8 +157,9 @@ export function AnnotationStage(props: StageProps) {
     const { x, y } = pointer();
 
     // Crop is driven by the handles rendered over the stage, not by drawing
-    // a fresh rectangle.
-    if (tool === "crop") return;
+    // a fresh rectangle. The eyedropper reads a pixel and draws nothing, and
+    // the editor handles its click on the wrapper around this stage.
+    if (tool === "crop" || tool === "eyedropper") return;
 
     if (tool === "select") {
       const clickedEmpty = e.target === stageRef.current || e.target.name() === "bg";
@@ -172,7 +179,7 @@ export function AnnotationStage(props: StageProps) {
           : Math.max(...existing.map((c) => c.n)) + 1;
       commit([
         ...anns,
-        { id: newId(), type: "counter", x, y, n, color, size: annCfg.counterSize },
+        { id: newId(), type: "counter", x, y, n, color, size: sizes.counter },
       ]);
       return;
     }
@@ -180,7 +187,13 @@ export function AnnotationStage(props: StageProps) {
     drawing.current = true;
     setSelectedId(null);
     if (tool === "arrow" || tool === "line") {
-      setDraft({ id: newId(), type: tool, points: [x, y, x, y], color, strokeWidth });
+      setDraft({
+        id: newId(),
+        type: tool,
+        points: [x, y, x, y],
+        color,
+        strokeWidth: sizes.stroke,
+      });
     } else if (tool === "rect" || tool === "ellipse") {
       setDraft({
         id: newId(),
@@ -190,7 +203,7 @@ export function AnnotationStage(props: StageProps) {
         w: 0,
         h: 0,
         color,
-        strokeWidth,
+        strokeWidth: sizes.stroke,
         fill: "none",
       });
     } else if (tool === "pen" || tool === "highlighter") {
@@ -199,7 +212,7 @@ export function AnnotationStage(props: StageProps) {
         type: tool,
         points: [x, y],
         color,
-        strokeWidth: tool === "highlighter" ? strokeWidth * 4 : strokeWidth,
+        strokeWidth: tool === "highlighter" ? sizes.highlighter : sizes.stroke,
         opacity: tool === "highlighter" ? annCfg.highlighterOpacity : 1,
       });
     } else if (tool === "blur" || tool === "pixelate") {
@@ -210,7 +223,7 @@ export function AnnotationStage(props: StageProps) {
         y,
         w: 0,
         h: 0,
-        strength: tool === "blur" ? annCfg.blurStrength : annCfg.pixelSize,
+        strength: tool === "blur" ? sizes.blur : sizes.pixel,
       });
     }
   };
@@ -291,7 +304,7 @@ export function AnnotationStage(props: StageProps) {
       y,
       text: "",
       color,
-      fontSize: annCfg.fontSize,
+      fontSize: sizes.font,
     };
     commit([...anns, ann]);
     props.onStartTextEdit(ann.id);
@@ -580,7 +593,9 @@ function AnnNode({
             updateAnn(a.id, {
               x: node.x(),
               y: node.y(),
-              fontSize: Math.max(8, a.fontSize * s),
+              // Clamped to the same range the size control offers, so a handle
+              // drag cannot leave text at a size the slider then snaps away.
+              fontSize: clampSize("font", a.fontSize * s),
             });
           }}
         />
@@ -601,7 +616,11 @@ function AnnNode({
             const node = e.target;
             const s = node.scaleX();
             node.scale({ x: 1, y: 1 });
-            updateAnn(a.id, { x: node.x(), y: node.y(), size: Math.max(14, a.size * s) });
+            updateAnn(a.id, {
+              x: node.x(),
+              y: node.y(),
+              size: clampSize("counter", a.size * s),
+            });
           }}
         >
           <Circle

@@ -19,4 +19,5 @@ export const TOOL_KEYS: Record<string, Tool> = {
   KeyB: "blur",
   KeyX: "pixelate",
   KeyN: "counter",
+  KeyI: "eyedropper",
 };

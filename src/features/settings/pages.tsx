@@ -152,7 +152,7 @@ export function AnnotationsPage() {
           <SliderRow
             value={a.strokeWidth}
             min={1}
-            max={12}
+            max={24}
             onChange={(v) => update({ annotations: { strokeWidth: v } })}
             format={(v) => `${v} px`}
           />
@@ -161,6 +161,15 @@ export function AnnotationsPage() {
           <Toggle
             checked={a.penSmoothing}
             onChange={(v) => update({ annotations: { penSmoothing: v } })}
+          />
+        </Row>
+        <Row title="Highlighter width">
+          <SliderRow
+            value={a.highlighterWidth}
+            min={4}
+            max={80}
+            onChange={(v) => update({ annotations: { highlighterWidth: v } })}
+            format={(v) => `${v} px`}
           />
         </Row>
         <Row title="Highlighter opacity">
@@ -176,8 +185,8 @@ export function AnnotationsPage() {
         <Row title="Text size">
           <SliderRow
             value={a.fontSize}
-            min={10}
-            max={64}
+            min={8}
+            max={96}
             onChange={(v) => update({ annotations: { fontSize: v } })}
             format={(v) => `${v} px`}
           />
@@ -185,24 +194,24 @@ export function AnnotationsPage() {
         <Row title="Blur strength">
           <SliderRow
             value={a.blurStrength}
-            min={4}
-            max={40}
+            min={2}
+            max={60}
             onChange={(v) => update({ annotations: { blurStrength: v } })}
           />
         </Row>
         <Row title="Pixelation size">
           <SliderRow
             value={a.pixelSize}
-            min={4}
-            max={40}
+            min={2}
+            max={60}
             onChange={(v) => update({ annotations: { pixelSize: v } })}
           />
         </Row>
         <Row title="Step counter size">
           <SliderRow
             value={a.counterSize}
-            min={18}
-            max={56}
+            min={14}
+            max={96}
             onChange={(v) => update({ annotations: { counterSize: v } })}
             format={(v) => `${v} px`}
           />

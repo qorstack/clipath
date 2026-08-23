@@ -1,6 +1,7 @@
 export type Tool =
   | "select"
   | "crop"
+  | "eyedropper"
   | "arrow"
   | "line"
   | "rect"
@@ -37,6 +38,7 @@ export interface Settings {
     defaultColor: string;
     strokeWidth: number;
     penSmoothing: boolean;
+    highlighterWidth: number;
     highlighterOpacity: number;
     fontSize: number;
     blurStrength: number;

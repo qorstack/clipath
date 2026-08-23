@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Crop,
   MousePointer2,
@@ -17,9 +17,12 @@ import {
   Check,
   MoreHorizontal,
   Link,
+  Pipette,
 } from "lucide-react";
 import type { FinalAction, Tool } from "../../types";
+import type { SizeSpec } from "../editor/sizes";
 import { ColorPopover } from "./ColorPopover";
+import { SizePopover } from "./SizePopover";
 
 const TOOL_DEFS: { tool: Tool; icon: React.ElementType; label: string; key: string }[] = [
   { tool: "select", icon: MousePointer2, label: "Select", key: "V" },
@@ -40,9 +43,15 @@ export function Toolbar({
   setTool,
   color,
   setColor,
+  onCommitColor,
+  onColorGestureStart,
+  onPickFromImage,
   recentColors,
-  strokeWidth,
-  setStrokeWidth,
+  size,
+  onSize,
+  onSizeGestureStart,
+  displayScale,
+  highlighterOpacity,
   canUndo,
   canRedo,
   undo,
@@ -52,10 +61,20 @@ export function Toolbar({
   tool: Tool;
   setTool: (t: Tool) => void;
   color: string;
+  /** Applies a colour without recording it — used while one is being dragged. */
   setColor: (c: string) => void;
+  /** Applies a colour and remembers it. */
+  onCommitColor: (c: string) => void;
+  /** Marks the start of a colour change, so a drag is one undo step. */
+  onColorGestureStart: (force?: boolean) => void;
+  onPickFromImage: () => void;
   recentColors: string[];
-  strokeWidth: number;
-  setStrokeWidth: (w: number) => void;
+  /** The size the current tool — or the current selection — is measured in. */
+  size: { spec: SizeSpec; value: number } | null;
+  onSize: (v: number) => void;
+  onSizeGestureStart: (force?: boolean) => void;
+  displayScale: number;
+  highlighterOpacity: number;
   canUndo: boolean;
   canRedo: boolean;
   undo: () => void;
@@ -63,7 +82,22 @@ export function Toolbar({
   showTooltips: boolean;
 }) {
   const [colorOpen, setColorOpen] = useState(false);
-  const [widthOpen, setWidthOpen] = useState(false);
+  const [sizeOpen, setSizeOpen] = useState(false);
+  // Popovers hang off the wrapper rather than off their own button: the panel
+  // sets backdrop-filter, which makes it a stacking context, and a popover
+  // inside it is painted under the canvas no matter what its z-index says.
+  // So the button's centre is measured when it opens and used as the anchor.
+  const colorBtn = useRef<HTMLButtonElement | null>(null);
+  const sizeBtn = useRef<HTMLButtonElement | null>(null);
+  const [anchor, setAnchor] = useState({ color: 0, size: 0 });
+  const centerOf = (el: HTMLElement | null) =>
+    el ? el.offsetLeft + el.offsetWidth / 2 : 0;
+
+  // The chip's dot is the real on-screen thickness, so the toolbar answers
+  // "how big is this?" without anything having to be opened.
+  const dot = size
+    ? Math.max(3, Math.min(16, size.value * displayScale))
+    : 3;
 
   return (
     <div className="relative">
@@ -105,12 +139,22 @@ export function Toolbar({
         <div className="mx-1 h-5 w-px" style={{ background: "var(--border)" }} />
 
         <ToolButton
-          active={false}
+          active={tool === "eyedropper"}
+          onClick={onPickFromImage}
+          title={showTooltips ? "Pick Color from image (I)" : undefined}
+        >
+          <Pipette size={16} strokeWidth={2} />
+        </ToolButton>
+
+        <ToolButton
+          btnRef={colorBtn}
+          active={colorOpen}
           onClick={() => {
+            setAnchor((a) => ({ ...a, color: centerOf(colorBtn.current) }));
             setColorOpen(!colorOpen);
-            setWidthOpen(false);
+            setSizeOpen(false);
           }}
-          title={showTooltips ? "Color" : undefined}
+          title={showTooltips ? `Color — ${color} (1–8)` : undefined}
         >
           <span
             className="h-[15px] w-[15px] rounded-full"
@@ -120,18 +164,52 @@ export function Toolbar({
             }}
           />
         </ToolButton>
-        <ToolButton
-          active={false}
+
+        <button
+          ref={sizeBtn}
+          disabled={!size}
+          title={
+            showTooltips && size
+              ? `${size.spec.label} — ${Math.round(size.value)} px ([ and ], or scroll here)`
+              : undefined
+          }
+          aria-label={size ? size.spec.label : "Size"}
           onClick={() => {
-            setWidthOpen(!widthOpen);
+            setAnchor((a) => ({ ...a, size: centerOf(sizeBtn.current) }));
+            setSizeOpen(!sizeOpen);
             setColorOpen(false);
           }}
-          title={showTooltips ? "Stroke width" : undefined}
+          onWheel={(e) => {
+            if (!size) return;
+            onSizeGestureStart();
+            onSize(size.value - Math.sign(e.deltaY) * size.spec.step);
+          }}
+          className="flex h-[30px] items-center gap-1.5 rounded-[8px] px-2 transition-colors disabled:opacity-30"
+          style={{
+            background: sizeOpen ? "var(--accent)" : "transparent",
+            color: sizeOpen ? "#fff" : "var(--text)",
+          }}
+          onMouseEnter={(e) => {
+            if (!sizeOpen)
+              (e.currentTarget as HTMLElement).style.background = "var(--control-hover)";
+          }}
+          onMouseLeave={(e) => {
+            if (!sizeOpen)
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+          }}
         >
+          <span
+            className="shrink-0 rounded-full"
+            style={{
+              background: sizeOpen ? "#fff" : "var(--text)",
+              width: dot,
+              height: dot,
+            }}
+          />
           <span className="text-[11px] font-semibold tabular-nums">
-            {strokeWidth}
+            {size ? Math.round(size.value) : "—"}
           </span>
-        </ToolButton>
+        </button>
 
         <div className="mx-1 h-5 w-px" style={{ background: "var(--border)" }} />
 
@@ -154,40 +232,37 @@ export function Toolbar({
       </div>
 
       {colorOpen && (
-        <div className="absolute left-0 top-[calc(100%+6px)]">
+        <div
+          className="absolute top-[calc(100%+6px)] z-50 -translate-x-1/2"
+          style={{ left: anchor.color }}
+        >
           <ColorPopover
             color={color}
             recent={recentColors}
             onPick={setColor}
+            onCommit={onCommitColor}
+            onGestureStart={onColorGestureStart}
+            onPickFromImage={onPickFromImage}
+            anchorRef={colorBtn}
             onClose={() => setColorOpen(false)}
           />
         </div>
       )}
-      {widthOpen && (
+      {sizeOpen && size && (
         <div
-          className="panel-shadow absolute left-[220px] top-[calc(100%+6px)] z-50 flex items-center gap-3 rounded-[12px] border px-3 py-2.5"
-          style={{
-            background: "var(--elevated)",
-            borderColor: "var(--border)",
-            backdropFilter: "blur(20px)",
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute top-[calc(100%+6px)] z-50 -translate-x-1/2"
+          style={{ left: anchor.size }}
         >
-          <input
-            type="range"
-            min={1}
-            max={12}
-            value={strokeWidth}
-            onChange={(e) => setStrokeWidth(Number(e.target.value))}
-            style={{ accentColor: "var(--accent)" }}
-          />
-          <span
-            className="rounded-full"
-            style={{
-              background: "var(--text)",
-              width: Math.max(2, strokeWidth),
-              height: Math.max(2, strokeWidth),
-            }}
+          <SizePopover
+            spec={size.spec}
+            value={size.value}
+            color={color}
+            displayScale={displayScale}
+            highlighterOpacity={highlighterOpacity}
+            onChange={onSize}
+            onGestureStart={onSizeGestureStart}
+            anchorRef={sizeBtn}
+            onClose={() => setSizeOpen(false)}
           />
         </div>
       )}
@@ -201,15 +276,18 @@ function ToolButton({
   onClick,
   title,
   disabled,
+  btnRef,
 }: {
   children: React.ReactNode;
   active: boolean;
   onClick: () => void;
   title?: string;
   disabled?: boolean;
+  btnRef?: React.MutableRefObject<HTMLButtonElement | null>;
 }) {
   return (
     <button
+      ref={btnRef}
       title={title}
       aria-label={title}
       disabled={disabled}

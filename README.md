@@ -24,7 +24,14 @@ Ctrl + Alt + A   →  drag region  →  (annotate)  →  Enter
 - **Copy Image** — normal image clipboard copy for chat apps, Paint, browsers.
 - **Annotations** — arrow, line, rectangle, ellipse, pen, highlighter, text,
   blur, pixelate, and a sequential step counter (1, 2, 3…), with a full color
-  picker, undo/redo, and object editing.
+  picker, undo/redo, and object editing. Every annotation's colour and size can
+  be changed after it is drawn.
+- **Eyedropper** — take a colour straight off the capture (`I`), with a
+  magnified loupe and the hex under the cursor.
+- **Size you can see** — one size control that follows the tool or the
+  selection, previews the value at its real on-screen size, and shows a ghost of
+  the next stroke, counter or text under the pointer. `[` and `]` resize; the
+  digits `1`–`8` pick a palette colour.
 - **Editor** — every capture opens in an editor window with a Recent strip, so
   another shot's path is one click away.
 - **Crop** — trim a capture further without leaving the editor.

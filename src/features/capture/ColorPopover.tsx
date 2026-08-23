@@ -1,15 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-
-const PALETTE = [
-  "#FF3B30", // red
-  "#FF9500", // orange
-  "#FFCC00", // yellow
-  "#34C759", // green
-  "#0A84FF", // blue
-  "#BF5AF2", // purple
-  "#FFFFFF", // white
-  "#000000", // black
-];
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Pipette } from "lucide-react";
+import { PALETTE } from "../editor/palette";
 
 function hsvToHex(h: number, s: number, v: number): string {
   const f = (n: number) => {
@@ -44,11 +35,23 @@ export function ColorPopover({
   color,
   recent,
   onPick,
+  onCommit,
+  onGestureStart,
+  onPickFromImage,
+  anchorRef,
   onClose,
 }: {
   color: string;
   recent: string[];
+  /** The colour as it is being dragged. Applied, but not worth remembering. */
   onPick: (c: string) => void;
+  /** The colour the user settled on. This is what goes into the recents. */
+  onCommit: (c: string) => void;
+  /** Called as a change begins, so the whole of it is one undo step. */
+  onGestureStart: (force?: boolean) => void;
+  onPickFromImage?: () => void;
+  /** The button that opened this, so its own click is left to toggle. */
+  anchorRef?: React.RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
   const [custom, setCustom] = useState(false);
@@ -61,21 +64,53 @@ export function ColorPopover({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      // Closing on a press of the trigger too would fight the toggle: this
+      // would close, then the click would open it straight back up.
+      if (anchorRef?.current?.contains(target)) return;
+      if (ref.current && !ref.current.contains(target)) onClose();
     };
     window.addEventListener("pointerdown", handler, true);
     return () => window.removeEventListener("pointerdown", handler, true);
-  }, [onClose]);
+  }, [onClose, anchorRef]);
+
+  /**
+   * The colour being tuned in the custom picker, if there is one.
+   *
+   * Arriving at a custom colour means dragging the square, then the hue, then
+   * the square again. Recording each of those would leave the recents holding
+   * several shades of one colour — the same row-wiping problem as recording
+   * every frame, only slower. The whole run is one choice, and it is recorded
+   * when the user is finished with it: the picker closing, or another swatch
+   * being taken instead.
+   *
+   * It is a ref rather than state because `hsv` lags a fast drag by a frame,
+   * and what gets recorded has to be the colour that ended up on screen.
+   */
+  const pending = useRef<string | null>(null);
+  const commitRef = useRef(onCommit);
+  commitRef.current = onCommit;
+
+  const flush = useCallback(() => {
+    const hex = pending.current;
+    pending.current = null;
+    if (hex) commitRef.current(hex);
+  }, []);
+
+  // Closing the picker ends whatever run was in progress.
+  useEffect(() => flush, [flush]);
 
   const applyHsv = (next: [number, number, number]) => {
     setHsv(next);
     const hex = hsvToHex(next[0], next[1], next[2]);
+    pending.current = hex;
     setHexInput(hex);
     onPick(hex);
   };
 
   const handleSv = (e: React.PointerEvent) => {
     const el = svRef.current!;
+    onGestureStart(true);
     const move = (ev: PointerEvent | React.PointerEvent) => {
       const rect = el.getBoundingClientRect();
       const s = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
@@ -99,7 +134,7 @@ export function ColorPopover({
   return (
     <div
       ref={ref}
-      className="panel-shadow absolute z-50 rounded-[12px] border p-3"
+      className="panel-shadow rounded-[12px] border p-3"
       style={{
         background: "var(--elevated)",
         borderColor: "var(--border)",
@@ -113,7 +148,9 @@ export function ColorPopover({
           <button
             key={c}
             onClick={() => {
-              onPick(c);
+              flush();
+              onGestureStart(true);
+              onCommit(c);
               onClose();
             }}
             className="h-5 w-5 rounded-full transition-transform hover:scale-115"
@@ -135,23 +172,53 @@ export function ColorPopover({
             <button
               key={c}
               onClick={() => {
-                onPick(c);
+                flush();
+                onGestureStart(true);
+                onCommit(c);
                 onClose();
               }}
-              className="h-4 w-4 rounded-full"
-              style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.15)" }}
+              className="h-4 w-4 rounded-full transition-transform hover:scale-115"
+              style={{
+                background: c,
+                boxShadow:
+                  color.toUpperCase() === c.toUpperCase()
+                    ? "0 0 0 2px var(--elevated), 0 0 0 3.5px var(--accent)"
+                    : "inset 0 0 0 1px rgba(0,0,0,0.15)",
+              }}
               title={c}
             />
           ))}
         </div>
       )}
-      <button
-        className="mt-2.5 w-full rounded-[7px] py-1 text-[12px] font-medium"
-        style={{ background: "var(--control)", color: "var(--text)" }}
-        onClick={() => setCustom(!custom)}
-      >
-        Custom Color
-      </button>
+      <div className="mt-2.5 flex gap-1.5">
+        <button
+          className="flex-1 rounded-[7px] py-1 text-[12px] font-medium"
+          style={{
+            background: custom ? "var(--accent)" : "var(--control)",
+            color: custom ? "#fff" : "var(--text)",
+          }}
+          onClick={() => {
+            if (custom) flush();
+            setCustom(!custom);
+          }}
+        >
+          Custom Color
+        </button>
+        {onPickFromImage && (
+          <button
+            title="Pick a colour from the image (I)"
+            aria-label="Pick a colour from the image"
+            className="flex h-[26px] w-[30px] shrink-0 items-center justify-center rounded-[7px]"
+            style={{ background: "var(--control)", color: "var(--text)" }}
+            onClick={() => {
+              onPickFromImage();
+              onClose();
+            }}
+          >
+            <Pipette size={14} />
+          </button>
+        )}
+      </div>
       {custom && (
         <div className="mt-2.5">
           <div
@@ -173,6 +240,8 @@ export function ColorPopover({
             max={360}
             value={hsv[0]}
             onChange={(e) => applyHsv([Number(e.target.value), hsv[1], hsv[2]])}
+            onPointerDown={() => onGestureStart(true)}
+            onKeyDown={() => onGestureStart()}
             className="mt-2 h-2.5 w-full appearance-none rounded-full"
             style={{
               background:
@@ -195,7 +264,9 @@ export function ColorPopover({
                 const v = e.target.value.toUpperCase();
                 setHexInput(v);
                 if (/^#[0-9A-F]{6}$/.test(v)) {
+                  onGestureStart();
                   setHsv(hexToHsv(v));
+                  pending.current = v;
                   onPick(v);
                 }
               }}

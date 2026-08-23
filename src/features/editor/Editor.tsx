@@ -9,8 +9,22 @@ import { exportPixelRatio } from "../../lib/exportScale";
 import type { Ann, CounterAnn, FinalAction, RecentItem, Settings, TextAnn, Tool } from "../../types";
 import { AnnotationStage, type CropRect } from "../capture/AnnotationStage";
 import { ActionBar, Toolbar } from "../capture/Toolbar";
+import { CanvasCursor } from "./CanvasCursor";
 import { CropBox, RATIOS, fitRatio } from "./CropBox";
+import { samplePixel } from "./eyedropper";
 import { TOOL_KEYS } from "./keymap";
+import { PALETTE, rememberColor } from "./palette";
+import {
+  SIZE_SPECS,
+  clampSize,
+  getAnnSize,
+  initialSizes,
+  sizeKeyForAnn,
+  sizeKeyForTool,
+  withAnnSize,
+  type SizeKey,
+  type SizeMap,
+} from "./sizes";
 
 const MIME: Record<string, string> = {
   png: "image/png",
@@ -64,7 +78,13 @@ export function Editor({
   const [tool, setToolRaw] = useState<Tool>(settings.annotations.defaultTool);
   const [color, setColorRaw] = useState(settings.annotations.defaultColor);
   const [recentColors, setRecentColors] = useState<string[]>([]);
-  const [strokeWidth, setStrokeWidth] = useState(settings.annotations.strokeWidth);
+  // One size per kind of annotation, so switching tools never silently reuses
+  // a number that meant something else.
+  const [sizes, setSizes] = useState<SizeMap>(() => initialSizes(settings.annotations));
+  const sizesRef = useRef(sizes);
+  sizesRef.current = sizes;
+  /** Where the eyedropper hands control back to once a colour is taken. */
+  const toolBeforePick = useRef<Tool>("select");
 
   const [anns, setAnns] = useState<Ann[]>([]);
   const annsRef = useRef<Ann[]>([]);
@@ -80,6 +100,7 @@ export function Editor({
 
   const stageRef = useRef<Konva.Stage | null>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
+  const stageWrapRef = useRef<HTMLDivElement>(null);
   const objectUrl = useRef<string | null>(null);
   const activeThumb = useRef<HTMLButtonElement>(null);
 
@@ -219,25 +240,147 @@ export function Editor({
     setHistoryTick((t) => t + 1);
   }, []);
 
-  const setColor = useCallback(
-    (c: string) => {
-      setColorRaw(c);
-      setRecentColors((r) => [c, ...r.filter((x) => x !== c)].slice(0, 8));
-      const sel = annsRef.current.find((a) => a.id === selectedIdRef.current);
-      if (sel && "color" in sel) {
-        commit(
-          annsRef.current.map((a) => (a.id === sel.id ? { ...a, color: c } : a)) as Ann[],
-        );
-      }
+  /**
+   * Apply a colour, live. Called for every frame of a drag through the colour
+   * square, so it neither records the colour nor writes history — the
+   * annotation is recoloured in place on top of the one entry the gesture
+   * pushed when it started.
+   */
+  const setColor = useCallback((c: string) => {
+    setColorRaw(c);
+    const sel = annsRef.current.find((a) => a.id === selectedIdRef.current);
+    if (sel && "color" in sel) {
+      setAnns(
+        annsRef.current.map((a) => (a.id === sel.id ? { ...a, color: c } : a)) as Ann[],
+      );
+    }
+  }, []);
+
+  /** One undo step per colour gesture, on the same terms as the size control. */
+  const lastColorGesture = useRef(0);
+  const beginColorGesture = useCallback(
+    (force = false) => {
+      const now = performance.now();
+      if (force || now - lastColorGesture.current > 700) beginGesture();
+      lastColorGesture.current = now;
     },
-    [commit],
+    [beginGesture],
+  );
+
+  /**
+   * Apply a colour and remember it — the settled choice at the end of a pick,
+   * not the colours passed through on the way there.
+   *
+   * Only colours the palette does not already carry are worth a slot: the
+   * eight swatches are one row above, and a recents row that mirrored them
+   * offered a second way to click the same thing while pushing out the custom
+   * colours it exists to hold.
+   */
+  const chooseColor = useCallback(
+    (c: string) => {
+      setColor(c.toUpperCase());
+      setRecentColors((r) => rememberColor(r, c));
+    },
+    [setColor],
   );
 
   const setTool = useCallback((t: Tool) => {
-    setToolRaw(t);
+    setToolRaw((cur) => {
+      // Picking a colour is a detour, not a change of tool: remember what was
+      // in hand so the pick can put it back.
+      if (t === "eyedropper" && cur !== "eyedropper") toolBeforePick.current = cur;
+      return t;
+    });
     if (t !== "select") setSelectedId(null);
     if (t !== "crop") setCrop(null);
   }, []);
+
+  const endPick = useCallback(() => {
+    const back = toolBeforePick.current;
+    setToolRaw(back === "eyedropper" ? "select" : back);
+  }, []);
+
+  // ---- the one size control ------------------------------------------------
+  // What the size control edits: the selected annotation if there is one, the
+  // tool about to draw otherwise. Falling back to the stroke means the control
+  // is never dead while there is still something it could sensibly do.
+  const selAnn = useMemo(
+    () => anns.find((a) => a.id === selectedId) ?? null,
+    [anns, selectedId],
+  );
+  const sizeKey: SizeKey | null = useMemo(() => {
+    if (tool === "crop") return null;
+    if (selAnn) return sizeKeyForAnn(selAnn);
+    return sizeKeyForTool(tool) ?? "stroke";
+  }, [tool, selAnn]);
+  const sizeValue = sizeKey
+    ? selAnn && sizeKeyForAnn(selAnn) === sizeKey
+      ? getAnnSize(selAnn)
+      : sizes[sizeKey]
+    : 0;
+
+  // Dragging a slider fires a change per frame. One undo step per gesture is
+  // what people expect, so history is pushed once and the run of changes after
+  // it is applied live on top.
+  const lastSizeGesture = useRef(0);
+  const beginSizeGesture = useCallback(
+    (force = false) => {
+      const now = performance.now();
+      if (force || now - lastSizeGesture.current > 700) beginGesture();
+      lastSizeGesture.current = now;
+    },
+    [beginGesture],
+  );
+
+  const applySize = useCallback(
+    (raw: number) => {
+      if (!sizeKey) return;
+      const value = clampSize(sizeKey, raw);
+      // The new size also becomes the default for the next annotation of that
+      // kind — resizing a counter and then placing another one that ignored it
+      // is the sort of thing that makes a toolbar feel broken.
+      setSizes((s) => ({ ...s, [sizeKey]: value }));
+      const sel = annsRef.current.find((a) => a.id === selectedIdRef.current);
+      if (sel && sizeKeyForAnn(sel) === sizeKey) {
+        setAnns(
+          annsRef.current.map((a) => (a.id === sel.id ? withAnnSize(a, value) : a)),
+        );
+      }
+    },
+    [sizeKey],
+  );
+
+  const stepSize = useCallback(
+    (steps: number) => {
+      if (!sizeKey) return;
+      beginSizeGesture();
+      applySize(sizeValue + steps * SIZE_SPECS[sizeKey].step);
+    },
+    [sizeKey, sizeValue, applySize, beginSizeGesture],
+  );
+
+  // ---- eyedropper ----------------------------------------------------------
+  const pickColorAt = useCallback(
+    (ix: number, iy: number) => {
+      if (!image) return;
+      const hex = samplePixel(image, ix, iy);
+      if (hex) {
+        beginColorGesture(true);
+        chooseColor(hex);
+        showToast(`Picked ${hex}`);
+      }
+      endPick();
+    },
+    [image, beginColorGesture, chooseColor, showToast, endPick],
+  );
+
+  /** The number the next counter placed on this image will carry. */
+  const nextCounter = useMemo(() => {
+    const existing = anns.filter((a) => a.type === "counter") as CounterAnn[];
+    return existing.length === 0
+      ? settings.annotations.counterStart
+      : Math.max(...existing.map((c) => c.n)) + 1;
+  }, [anns, settings.annotations.counterStart]);
 
   // Crop opens on the whole image so the edges can be pushed inward.
   useEffect(() => {
@@ -288,11 +431,21 @@ export function Editor({
 
   const rememberPrefs = useCallback(async () => {
     const cfg = settings.annotations;
-    if (!cfg.rememberLastTool && !cfg.rememberLastColor) return;
     try {
       const s = await ipc.getSettings();
-      if (cfg.rememberLastTool && tool !== "select") s.annotations.defaultTool = tool;
+      if (cfg.rememberLastTool && tool !== "select" && tool !== "eyedropper")
+        s.annotations.defaultTool = tool;
       if (cfg.rememberLastColor) s.annotations.defaultColor = color;
+      // Sizes always carry over. Having to re-fatten the stroke on every
+      // capture is the friction the size control exists to remove, and the
+      // Settings page shows the same numbers, so the two stay in step.
+      const z = sizesRef.current;
+      s.annotations.strokeWidth = z.stroke;
+      s.annotations.highlighterWidth = z.highlighter;
+      s.annotations.fontSize = z.font;
+      s.annotations.counterSize = z.counter;
+      s.annotations.blurStrength = z.blur;
+      s.annotations.pixelSize = z.pixel;
       await ipc.setSettings(s);
     } catch {
       /* non-critical */
@@ -465,7 +618,8 @@ export function Editor({
 
       if (e.key === "Escape") {
         e.preventDefault();
-        if (selectedId) setSelectedId(null);
+        if (tool === "eyedropper") endPick();
+        else if (selectedId) setSelectedId(null);
         else ipc.closeEditor();
         return;
       }
@@ -526,8 +680,24 @@ export function Editor({
         );
         return;
       }
-      if (!e.ctrlKey && !e.altKey && !e.metaKey && TOOL_KEYS[e.code])
-        setTool(TOOL_KEYS[e.code]);
+      if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+        // [ and ] resize whatever the size control is pointed at; Shift makes
+        // the step five times bigger.
+        if (e.code === "BracketLeft" || e.code === "BracketRight") {
+          e.preventDefault();
+          stepSize((e.code === "BracketRight" ? 1 : -1) * (e.shiftKey ? 5 : 1));
+          return;
+        }
+        // 1-8 pick straight from the palette, which is faster than opening it.
+        const digit = /^Digit([1-8])$/.exec(e.code);
+        if (digit && !e.shiftKey) {
+          e.preventDefault();
+          beginColorGesture(true);
+          chooseColor(PALETTE[Number(digit[1]) - 1]);
+          return;
+        }
+        if (TOOL_KEYS[e.code]) setTool(TOOL_KEYS[e.code]);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -542,6 +712,10 @@ export function Editor({
     commit,
     beginGesture,
     setTool,
+    beginColorGesture,
+    chooseColor,
+    stepSize,
+    endPick,
     tool,
     recent,
     path,
@@ -587,9 +761,15 @@ export function Editor({
           setTool={setTool}
           color={color}
           setColor={setColor}
+          onCommitColor={chooseColor}
+          onColorGestureStart={beginColorGesture}
+          onPickFromImage={() => setTool("eyedropper")}
           recentColors={recentColors}
-          strokeWidth={strokeWidth}
-          setStrokeWidth={setStrokeWidth}
+          size={sizeKey ? { spec: SIZE_SPECS[sizeKey], value: sizeValue } : null}
+          onSize={applySize}
+          onSizeGestureStart={beginSizeGesture}
+          displayScale={displayScale}
+          highlighterOpacity={settings.annotations.highlighterOpacity}
           canUndo={past.current.length > 0}
           canRedo={future.current.length > 0}
           undo={undo}
@@ -615,7 +795,19 @@ export function Editor({
           </div>
         )}
         {!error && image && (
-          <div className="relative" style={{ width: stageW, height: stageH }}>
+          <div
+            ref={stageWrapRef}
+            className="relative"
+            style={{ width: stageW, height: stageH }}
+            onMouseDown={(e) => {
+              if (tool !== "eyedropper" || e.button !== 0) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              pickColorAt(
+                (e.clientX - r.left) / displayScale,
+                (e.clientY - r.top) / displayScale,
+              );
+            }}
+          >
             <AnnotationStage
               imgW={image.naturalWidth}
               imgH={image.naturalHeight}
@@ -623,7 +815,7 @@ export function Editor({
               bgImage={image}
               tool={tool}
               color={color}
-              strokeWidth={strokeWidth}
+              sizes={sizes}
               annCfg={settings.annotations}
               anns={anns}
               setAnnsLive={setAnns}
@@ -641,6 +833,20 @@ export function Editor({
               accent={settings.appearance.accent}
               crop={crop}
               onCropChange={setCrop}
+            />
+
+            <CanvasCursor
+              hostRef={stageWrapRef}
+              tool={tool}
+              sizeKey={sizeKey}
+              value={sizeValue}
+              color={color}
+              displayScale={displayScale}
+              highlighterOpacity={settings.annotations.highlighterOpacity}
+              nextCounter={nextCounter}
+              image={image}
+              bounds={{ w: stageW, h: stageH }}
+              disabled={!!editingTextId || !!editingCounterId}
             />
 
             {tool === "crop" && crop && (
