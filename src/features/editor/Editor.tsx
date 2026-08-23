@@ -70,7 +70,9 @@ export function Editor({
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; tone: "info" | "error" } | null>(
+    null,
+  );
   const toastTimer = useRef(0);
   const [recent, setRecent] = useState<RecentItem[]>([]);
   const [viewport, setViewport] = useState({ w: 800, h: 500 });
@@ -160,11 +162,35 @@ export function Editor({
     [],
   );
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
+  const showToast = useCallback((text: string, tone: "info" | "error" = "info") => {
+    setToast({ text, tone });
     window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 1800);
+    // A failure names something to do about it, so it is given time to be
+    // read. A confirmation is one word and should get out of the way.
+    toastTimer.current = window.setTimeout(
+      () => setToast(null),
+      tone === "error" ? 4200 : 1800,
+    );
   }, []);
+
+  /**
+   * Report a failure without taking the editor down with it.
+   *
+   * `setError` replaces the whole canvas, which is right when the image could
+   * not be loaded and there is nothing to show. It is wrong for everything
+   * else: a copy, a crop or a delete that fails leaves the capture and the
+   * annotations exactly where they were, and throwing that away to display
+   * "Something went wrong" loses work over an operation that can just be
+   * tried again. Most of these are the Windows clipboard being held for a
+   * moment by another app.
+   */
+  const reportFailure = useCallback(
+    (e: unknown, note?: string) => {
+      const reason = String(e).replace(/^Error:\s*/, "");
+      showToast(note ? `${reason} — ${note}` : reason, "error");
+    },
+    [showToast],
+  );
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
   // ---- recent strip --------------------------------------------------------
@@ -452,7 +478,26 @@ export function Editor({
     }
   }, [settings, tool, color]);
 
-  const finalize = useCallback(
+  /**
+   * The finalize still in flight, if there is one.
+   *
+   * Copying runs off the event loop, so the window can be closed out from
+   * under it: pressing Enter and then Escape straight away hides the window
+   * and pulls the foreground back to the app underneath while the copy is
+   * still at the clipboard step. Windows refuses to open the clipboard while
+   * it is servicing that foreground change, and the copy loses the race — the
+   * "clipboard write failed" that shows up only when the app is dismissed
+   * immediately after a copy. Every route out of the editor waits on this
+   * first, so the copy is finished before anything moves.
+   */
+  const pendingFinalize = useRef<Promise<void> | null>(null);
+
+  /** Wait for an in-flight copy to finish. Its own failure is already reported. */
+  const settleFinalize = useCallback(async () => {
+    await pendingFinalize.current?.catch(() => {});
+  }, []);
+
+  const runFinalize = useCallback(
     async (action: FinalAction) => {
       if (busy || !image) return;
       setBusy(true);
@@ -472,12 +517,25 @@ export function Editor({
           showToast(action === "copy-path" ? "Path copied" : "Image copied");
         }
       } catch (e) {
-        setError(String(e));
+        // finalizeImage writes and verifies the file before it copies
+        // anything, so a failure at the clipboard step has not cost the
+        // capture — and saying so is the difference between "try again" and
+        // "that screenshot is gone".
+        reportFailure(e, action === "save" ? undefined : "the screenshot is saved");
       } finally {
         setBusy(false);
       }
     },
-    [busy, image, exportDataUrl, rememberPrefs, path, refreshRecent, showToast],
+    [busy, image, exportDataUrl, rememberPrefs, path, refreshRecent, showToast, reportFailure],
+  );
+
+  const finalize = useCallback(
+    (action: FinalAction) => {
+      const run = runFinalize(action);
+      pendingFinalize.current = run;
+      return run;
+    },
+    [runFinalize],
   );
 
   /** Flatten pending annotations into the file without closing the editor. */
@@ -510,13 +568,14 @@ export function Editor({
   useEffect(() => {
     const un = getCurrentWindow().onCloseRequested(async (event) => {
       event.preventDefault();
+      await settleFinalize();
       await applyPending();
       await ipc.closeEditor();
     });
     return () => {
       un.then((f) => f());
     };
-  }, [applyPending]);
+  }, [applyPending, settleFinalize]);
 
   // A newly requested capture arrives while the editor is open.
   useEffect(() => {
@@ -550,11 +609,11 @@ export function Editor({
       setToolRaw("select");
       setReloadKey((k) => k + 1);
     } catch (e) {
-      setError(String(e));
+      reportFailure(e);
     } finally {
       setBusy(false);
     }
-  }, [crop, image, busy, displayScale, path]);
+  }, [crop, image, busy, displayScale, path, reportFailure]);
 
   const handleMore = useCallback(
     async (id: string) => {
@@ -603,10 +662,20 @@ export function Editor({
           }
         }
       } catch (e) {
-        setError(String(e));
+        reportFailure(e);
       }
     },
-    [filename, folder, path, exportDataUrl, applyPending, recent, settings, showToast],
+    [
+      filename,
+      folder,
+      path,
+      exportDataUrl,
+      applyPending,
+      recent,
+      settings,
+      showToast,
+      reportFailure,
+    ],
   );
 
   // ---- keyboard ------------------------------------------------------------
@@ -620,7 +689,7 @@ export function Editor({
         e.preventDefault();
         if (tool === "eyedropper") endPick();
         else if (selectedId) setSelectedId(null);
-        else ipc.closeEditor();
+        else settleFinalize().then(() => ipc.closeEditor());
         return;
       }
       if (e.key === "Enter") {
@@ -716,6 +785,7 @@ export function Editor({
     chooseColor,
     stepSize,
     endPick,
+    settleFinalize,
     tool,
     recent,
     path,
@@ -1017,10 +1087,14 @@ export function Editor({
 
       {toast && (
         <div
-          className="panel-shadow pointer-events-none absolute left-1/2 top-16 z-50 -translate-x-1/2 rounded-full px-4 py-1.5 text-[12.5px] font-medium"
-          style={{ background: "var(--elevated)", color: "var(--text)" }}
+          className="panel-shadow pointer-events-none absolute left-1/2 top-16 z-50 max-w-[80%] -translate-x-1/2 rounded-[16px] px-4 py-1.5 text-center text-[12.5px] font-medium"
+          style={
+            toast.tone === "error"
+              ? { background: "var(--destructive)", color: "#fff" }
+              : { background: "var(--elevated)", color: "var(--text)" }
+          }
         >
-          {toast}
+          {toast.text}
         </div>
       )}
 
